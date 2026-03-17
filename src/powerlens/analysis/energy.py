@@ -12,6 +12,8 @@ This module is the core intellectual contribution of PowerLens.
 """
 
 import numpy as np
+# np.trapz was renamed to np.trapezoid in NumPy 2.0
+_trapz = getattr(np, "trapezoid", None) or np.trapz
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
@@ -173,14 +175,14 @@ def _compute_inference_energy(
 
     # Trapezoidal integration: energy = integral(power, dt)
     duration = inf_end - inf_start
-    energy = float(np.trapz(window_power, window_times))
+    energy = float(_trapz(window_power, window_times))
 
     # Per-rail energy breakdown
     rail_energy = {}
     for rail_name, rail_data in rails.items():
         rail_power = rail_data["power"][mask]
         if len(rail_power) >= 2:
-            rail_energy[rail_name] = float(np.trapz(rail_power, window_times))
+            rail_energy[rail_name] = float(_trapz(rail_power, window_times))
 
     return InferenceEnergy(
         index=index,
