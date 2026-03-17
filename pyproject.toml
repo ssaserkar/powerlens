@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "powerlens"
+version = "0.1.0"
+description = "Per-inference energy profiling for AI workloads on NVIDIA Jetson"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Your Name", email = "your@email.com"}
+]
+keywords = ["jetson", "power", "energy", "inference", "profiling", "edge-ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Hardware",
+    "Topic :: System :: Monitoring",
+]
+
+dependencies = [
+    "numpy>=1.20.0",
+    "matplotlib>=3.5.0",
+]
+
+[project.optional-dependencies]
+jetson = [
+    "smbus2>=0.4.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/powerlens"
+Repository = "https://github.com/yourusername/powerlens"
+Issues = "https://github.com/yourusername/powerlens/issues"
+
+[project.scripts]
+powerlens = "powerlens.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
