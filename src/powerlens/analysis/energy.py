@@ -12,14 +12,14 @@ This module is the core intellectual contribution of PowerLens.
 """
 
 import numpy as np
-# np.trapz was renamed to np.trapezoid in NumPy 2.0
-_trapz = getattr(np, "trapezoid", None) or np.trapz
+
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
 from powerlens.sensors.types import PowerSample
 
-
+# np.trapz was renamed to np.trapezoid in NumPy 2.0
+_trapz = getattr(np, "trapezoid", None) or np.trapz
 @dataclass
 class InferenceEnergy:
     """Energy measurement for a single inference."""
