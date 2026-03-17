@@ -3,7 +3,7 @@
 import time
 
 import powerlens
-from powerlens.profiler.session import PowerLensContext, profile
+from powerlens.profiler.session import PowerLensContext
 from powerlens.analysis.energy import EnergyReport
 from powerlens.sensors.mock import MockSensor
 
