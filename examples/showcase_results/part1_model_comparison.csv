@@ -1,0 +1,4 @@
+model,latency_ms,energy_per_inference_j,avg_power_w,peak_power_w,idle_power_w,gpu_util_avg_pct,gpu_freq_avg_mhz
+light,1.3106,0.010849,11.4845,11.8430,7.5919,21.9,367
+medium,7.2065,0.129627,30.0387,31.5944,7.9902,57.4,826
+heavy,33.4880,1.060352,31.8167,33.3258,11.7468,53.7,861
