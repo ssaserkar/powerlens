@@ -5,14 +5,11 @@ If the user doesn't have I2C permissions or the INA3221 is
 already claimed by the kernel driver, we can read through
 the standard hwmon sysfs interface.
 
-This is less flexible (no control over sample rate) but
-works without special permissions on Jetson.
+On Jetson, the kernel INA3221 driver typically claims the device,
+making this the PRIMARY sensor backend (not a fallback).
 
-Typical paths on Jetson Orin Nano:
-    /sys/bus/i2c/devices/1-0040/hwmon/hwmon*/
-        in1_input   (bus voltage channel 1, mV)
-        curr1_input (current channel 1, mA)
-        power1_input (power channel 1, uW) — may not exist
+Sysfs provides label files that tell us the actual rail names,
+so we don't need to hardcode them.
 """
 
 import glob
@@ -26,19 +23,8 @@ from powerlens.sensors.types import PowerSample
 logger = logging.getLogger(__name__)
 
 
-# Default rail names for Jetson Orin Nano channels
-_DEFAULT_RAIL_NAMES = {
-    1: "VDD_GPU_SOC",
-    2: "VDD_CPU_CV",
-    3: "VIN_SYS_5V0",
-}
-
-
 def find_ina3221_hwmon_paths() -> List[str]:
-    """Find all hwmon sysfs paths for INA3221 devices.
-
-    Returns list of paths like /sys/class/hwmon/hwmon3/
-    """
+    """Find all hwmon sysfs paths for INA3221 devices."""
     paths = []
     search_patterns = [
         "/sys/bus/i2c/devices/*/hwmon/hwmon*",
@@ -63,8 +49,10 @@ class SysfsSensor:
     """
     Read INA3221 power data through Linux sysfs/hwmon interface.
 
-    This is the fallback when direct I2C access is not available.
-    Works without i2c group membership on most Jetson configurations.
+    This is the primary sensor backend on Jetson because the kernel
+    INA3221 driver claims the I2C device, preventing direct access.
+
+    Auto-detects rail names from sysfs label files.
 
     Usage:
         sensor = SysfsSensor()
@@ -80,19 +68,13 @@ class SysfsSensor:
         hwmon_path: Optional[str] = None,
         rail_names: Optional[Dict[int, str]] = None,
     ):
-        """Initialize sysfs sensor.
-
-        Args:
-            hwmon_path: Path to hwmon directory. Auto-detected if None.
-            rail_names: Dict mapping channel number to rail name.
-                        Uses Jetson Orin Nano defaults if None.
-        """
         self._path = hwmon_path
-        self._rail_names = rail_names or _DEFAULT_RAIL_NAMES
+        self._rail_names = rail_names  # None means auto-detect from labels
         self._detected = False
+        self._channels: List[int] = []
 
     def _detect(self):
-        """Auto-detect hwmon path if not provided."""
+        """Auto-detect hwmon path and channel configuration."""
         if self._path is None:
             paths = find_ina3221_hwmon_paths()
             if paths:
@@ -100,6 +82,41 @@ class SysfsSensor:
                 logger.info("Found INA3221 at sysfs path: %s", self._path)
             else:
                 logger.debug("No INA3221 found in sysfs")
+                self._detected = True
+                return
+
+        # Auto-detect available channels
+        # Only include channels that have BOTH:
+        #   1. in{n}_input and curr{n}_input files (voltage + current)
+        #   2. in{n}_label file (proves it's a real named rail)
+        # This filters out computed/derived channels (like channel 4)
+        if self._rail_names is None:
+            self._rail_names = {}
+            for ch in range(1, 4):  # INA3221 has exactly 3 physical channels
+                voltage_file = os.path.join(self._path, f"in{ch}_input")
+                current_file = os.path.join(self._path, f"curr{ch}_input")
+                label_file = os.path.join(self._path, f"in{ch}_label")
+
+                if not (os.path.exists(voltage_file) and os.path.exists(current_file)):
+                    continue
+
+                # Read label if available
+                if os.path.exists(label_file):
+                    try:
+                        with open(label_file, "r") as f:
+                            label = f.read().strip()
+                        self._rail_names[ch] = label
+                    except OSError:
+                        self._rail_names[ch] = f"channel_{ch}"
+                else:
+                    self._rail_names[ch] = f"channel_{ch}"
+
+        self._channels = sorted(self._rail_names.keys())
+        logger.info(
+            "Detected %d channels: %s",
+            len(self._channels),
+            {ch: self._rail_names[ch] for ch in self._channels},
+        )
         self._detected = True
 
     def available(self) -> bool:
@@ -108,7 +125,7 @@ class SysfsSensor:
             self._detect()
         if self._path is None:
             return False
-        return os.path.exists(os.path.join(self._path, "in1_input"))
+        return len(self._channels) > 0
 
     def open(self):
         """Open sensor (detect path if needed)."""
@@ -165,9 +182,9 @@ class SysfsSensor:
         )
 
     def read_all(self) -> List[PowerSample]:
-        """Read all 3 channels."""
+        """Read all detected channels."""
         samples = []
-        for ch in sorted(self._rail_names.keys()):
+        for ch in self._channels:
             try:
                 samples.append(self.read_channel(ch))
             except (FileNotFoundError, OSError) as e:
@@ -178,3 +195,10 @@ class SysfsSensor:
     def read_total_power(self) -> float:
         """Total power across all readable channels."""
         return sum(s.power_w for s in self.read_all())
+
+    @property
+    def detected_rails(self) -> Dict[int, str]:
+        """Return detected channel-to-rail-name mapping."""
+        if not self._detected:
+            self._detect()
+        return dict(self._rail_names) if self._rail_names else {}

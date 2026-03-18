@@ -1,5 +1,7 @@
+README.md
 pyproject.toml
 src/powerlens/__init__.py
+src/powerlens/cli.py
 src/powerlens.egg-info/PKG-INFO
 src/powerlens.egg-info/SOURCES.txt
 src/powerlens.egg-info/dependency_links.txt
@@ -7,5 +9,18 @@ src/powerlens.egg-info/entry_points.txt
 src/powerlens.egg-info/requires.txt
 src/powerlens.egg-info/top_level.txt
 src/powerlens/analysis/__init__.py
+src/powerlens/analysis/energy.py
+src/powerlens/export/__init__.py
+src/powerlens/export/csv_export.py
 src/powerlens/profiler/__init__.py
+src/powerlens/profiler/sampler.py
+src/powerlens/profiler/session.py
 src/powerlens/sensors/__init__.py
+src/powerlens/sensors/auto.py
+src/powerlens/sensors/ina3221.py
+src/powerlens/sensors/jetson.py
+src/powerlens/sensors/mock.py
+src/powerlens/sensors/sysfs.py
+src/powerlens/sensors/types.py
+src/powerlens/visualization/__init__.py
+src/powerlens/visualization/plots.py
