@@ -132,35 +132,33 @@ def profile(
     load_level: float = 0.8,
     sample_rate_hz: float = 100.0,
     sensor=None,
+    real_workload: bool = False,
 ) -> EnergyReport:
-    """One-call profiling function using simulated workload.
-
-    This is the simplest way to test PowerLens without real
-    AI models. It simulates inference by setting the mock
-    sensor's load level for a specified duration.
+    """One-call profiling function.
 
     Args:
-        num_runs: Number of simulated inferences.
+        num_runs: Number of inferences to simulate.
         inference_duration_s: Duration of each inference in seconds.
-        load_level: Simulated GPU load (0.0 to 1.0).
+        load_level: Simulated GPU load 0.0-1.0 (mock sensor only).
         sample_rate_hz: Power sampling rate in Hz.
-        sensor: Sensor object. If None, uses MockSensor.
+        sensor: Sensor object. If None, auto-detects or uses mock.
+        real_workload: If True, run actual CPU computation instead
+                       of time.sleep(). Creates measurable power change
+                       on real hardware.
 
     Returns:
         EnergyReport with per-inference energy statistics.
-
-    Usage:
-        import powerlens
-        report = powerlens.profile(num_runs=100, load_level=0.8)
-        print(report.summary())
     """
-    use_mock = sensor is None
-    if use_mock:
-        sensor = MockSensor()
+    from powerlens.sensors.mock import MockSensor
 
+    if sensor is None:
+        from powerlens.sensors.auto import detect_sensor
+        sensor = detect_sensor(use_mock_fallback=True)
+
+    use_mock = isinstance(sensor, MockSensor)
     sensor.open()
 
-    logger.info("PowerLens profiling: %d runs at %.0f%% load", num_runs, load_level * 100)
+    logger.info("PowerLens profiling: %d runs", num_runs)
 
     # Collect idle baseline
     logger.info("Measuring idle baseline...")
@@ -170,7 +168,7 @@ def profile(
     idle_sampler.stop()
     idle_samples = idle_sampler.get_samples()
 
-    # Run simulated inferences
+    # Run inferences
     sampler = PowerSampler(sensor, sample_rate_hz)
     sampler.start()
 
@@ -178,17 +176,17 @@ def profile(
     for i in range(num_runs):
         start = time.monotonic()
 
-        # Simulate load
         if use_mock:
             sensor.set_load(load_level)
-        time.sleep(inference_duration_s)
-        if use_mock:
+            time.sleep(inference_duration_s)
             sensor.set_load(0.0)
+        elif real_workload:
+            _cpu_stress(inference_duration_s)
+        else:
+            time.sleep(inference_duration_s)
 
         end = time.monotonic()
         inference_timestamps.append((start, end))
-
-        # Small gap between inferences
         time.sleep(0.005)
 
     sampler.stop()
@@ -200,3 +198,19 @@ def profile(
         inference_timestamps=inference_timestamps,
         idle_samples=idle_samples,
     )
+
+
+def _cpu_stress(duration_s: float):
+    """Run CPU-intensive computation for a specified duration.
+
+    This creates a measurable power increase on real hardware,
+    unlike time.sleep() which keeps the CPU idle.
+    """
+    import numpy as np
+
+    end_time = time.monotonic() + duration_s
+    while time.monotonic() < end_time:
+        # Matrix multiply — stresses CPU and memory
+        a = np.random.randn(200, 200).astype(np.float32)
+        b = np.random.randn(200, 200).astype(np.float32)
+        np.dot(a, b)
