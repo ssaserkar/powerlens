@@ -27,3 +27,9 @@ Thumbs.db
 .pytest_cache/
 .coverage
 "@ | Set-Content -Path .gitignore -Encoding UTF8
+# Results and generated files
+results*/
+showcase_results/
+examples/showcase_results/
+examples/*.onnx
+*.engine
