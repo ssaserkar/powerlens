@@ -150,10 +150,10 @@ sudo usermod -aG i2c $USER  # then re-login
 
 ## Related Work
 
-- [Chakraborty et al. (2024)](https://doi.org/) — Profiling concurrent vision inference on Jetson (compute-level)
-- [Li & Zheng (2022)](https://doi.org/) — Profiling Jetson GPU devices for autonomous machines
-- [Van der Vlugt et al. (2024)](https://doi.org/) — PowerSensor3: high-accuracy external power measurement
-- [powertool](https://github.com/) — INA226 power measurement for TI boards
+- [Chakraborty et al. (2024)](https://arxiv.org/html/2508.08430v1)) — Profiling concurrent vision inference on Jetson (compute-level)
+- [Li & Zheng (2022)](https://par.nsf.gov/servlets/purl/10208378) — Profiling Jetson GPU devices for autonomous machines
+- [Van der Vlugt et al. (2024)](https://arxiv.org/pdf/2504.17883) — PowerSensor3: high-accuracy external power measurement
+- [powertool](https://github.com/nmenon/powertool)) — INA226 power measurement for TI boards
 
 PowerLens complements these by providing per-inference energy measurement using on-board sensors with zero additional hardware.
 
