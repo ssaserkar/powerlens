@@ -33,3 +33,11 @@ showcase_results/
 examples/showcase_results/
 examples/*.onnx
 *.engine
+
+# Results and generated files
+results*/
+showcase_results/
+examples/showcase_results/
+examples/*.onnx
+*.onnx
+*.engine
