@@ -186,7 +186,7 @@ def cmd_profile(args):
         thermal.start()
 
     if gpu_monitor.available:
-        print(f"GPU utilization monitoring: active")
+        print("GPU utilization monitoring: active")
         gpu_monitor.start()
     
     with ctx:
