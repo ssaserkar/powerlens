@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "powerlens"
-version = "0.1.0"
+version = "0.1.1"
 description = "Per-inference energy profiling for AI workloads on NVIDIA Jetson"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.8"
 authors = [
-    {name = "Your Name", email = "your@email.com"}
+    {name = "Soham Aserkar", email = "soham339@gmail.com"}
 ]
 keywords = ["jetson", "power", "energy", "inference", "profiling", "edge-ai"]
 classifiers = [
