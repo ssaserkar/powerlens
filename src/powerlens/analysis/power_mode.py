@@ -42,7 +42,7 @@ class PowerModeReport:
     results: List[PowerModeResult]
     best_efficiency: Optional[PowerModeResult] = None
     best_latency: Optional[PowerModeResult] = None
-    
+
     def summary(self) -> str:
         lines = [
             "",
@@ -51,7 +51,7 @@ class PowerModeReport:
             f"{'Mode':15s} {'Latency':>10s} {'Energy/inf':>12s} {'Avg Power':>12s} {'Efficiency':>12s}",
             "-" * 70,
         ]
-        
+
         for r in self.results:
             lines.append(
                 f"{r.mode_name:15s} "
@@ -60,16 +60,16 @@ class PowerModeReport:
                 f"{r.avg_power_w:>11.2f}W "
                 f"{r.efficiency_inf_per_j:>10.1f} inf/J"
             )
-        
+
         lines.append("-" * 70)
-        
+
         if self.best_efficiency:
             lines.append(f"Most efficient: {self.best_efficiency.mode_name} "
                         f"({self.best_efficiency.efficiency_inf_per_j:.1f} inf/J)")
         if self.best_latency:
             lines.append(f"Lowest latency: {self.best_latency.mode_name} "
                         f"({self.best_latency.latency_ms:.1f} ms)")
-        
+
         lines.append("")
         return "\n".join(lines)
 
@@ -161,7 +161,7 @@ def set_power_mode(mode_id: int) -> bool:
 
 def get_available_modes() -> List[Dict[str, str]]:
     """List available power modes.
-    
+
     Returns:
         List of dicts with 'id' and 'name'.
     """
@@ -170,7 +170,7 @@ def get_available_modes() -> List[Dict[str, str]]:
             ["nvpmodel", "-p", "--verbose"],
             capture_output=True, text=True, timeout=5,
         )
-        
+
         modes = []
         for line in result.stdout.split("\n"):
             # Parse lines like "POWER_MODEL ID=0 NAME=MAXN"
@@ -184,7 +184,7 @@ def get_available_modes() -> List[Dict[str, str]]:
                     if part.startswith("NAME="):
                         mode_name = part.split("=")[1]
                 modes.append({"id": mode_id, "name": mode_name})
-        
+
         return modes if modes else [{"id": 0, "name": "MAXN"}]
     except Exception as e:
         logger.warning("Could not list power modes: %s", e)

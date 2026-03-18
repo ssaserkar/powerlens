@@ -188,7 +188,7 @@ def cmd_profile(args):
     if gpu_monitor.available:
         print("GPU utilization monitoring: active")
         gpu_monitor.start()
-    
+
     with ctx:
         timestamps = run_trt_inference(
             engine, num_runs=args.runs, warmup=args.warmup,
@@ -221,7 +221,7 @@ def cmd_profile(args):
             throttle_temp_c=85.0,
         )
         print(thermal_report.summary())
-    
+
     if gpu_monitor.available:
         print(gpu_monitor.format_summary())
 
@@ -710,7 +710,7 @@ def main():
     modes_parser.add_argument("--warmup", type=int, default=5)
     modes_parser.add_argument("--rate", type=float, default=100.0)
     modes_parser.add_argument("--output", "-o", type=str, default=None)
-    
+
     # Batch scaling command
     batch_parser = subparsers.add_parser(
         "batch-scaling",
