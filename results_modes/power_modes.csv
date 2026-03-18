@@ -1,0 +1,4 @@
+mode_id,mode_name,energy_per_inference_j,avg_power_w,peak_power_w,latency_ms,efficiency_inf_per_j
+0,15W,0.014887,11.5903,12.2339,2.8670,67.1743
+1,25W,0.014863,11.7590,12.1936,2.8958,67.2815
+2,MAXN_SUPER,0.015234,12.0572,12.5154,2.9048,65.6419

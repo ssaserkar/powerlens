@@ -18,7 +18,7 @@ Quick start:
     print(report.summary())
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from powerlens.profiler.session import profile, PowerLensContext  # noqa: F401
 
