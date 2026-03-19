@@ -12,12 +12,65 @@ Usage:
         samples = sensor.read_all()
 """
 
+import os
 import logging
 import platform as platform_mod
 
 from powerlens.sensors.mock import MockSensor
 
 logger = logging.getLogger(__name__)
+
+
+def detect_jetson_board() -> dict:
+    """Detect which Jetson board we're running on.
+
+    Reads /proc/device-tree/model which NVIDIA populates
+    on all Jetson platforms.
+
+    Returns:
+        Dict with 'model', 'chip', and 'is_jetson' info.
+    """
+    info = {
+        "model": "unknown",
+        "chip": "unknown",
+        "is_jetson": False,
+    }
+
+    model_path = "/proc/device-tree/model"
+    if os.path.exists(model_path):
+        try:
+            with open(model_path, "r", errors="replace") as f:
+                model = f.read().strip().rstrip("\x00")
+            info["model"] = model
+            info["is_jetson"] = "jetson" in model.lower() or "orin" in model.lower()
+        except OSError:
+            pass
+
+    chip_path = "/sys/module/tegra_fuse/parameters/tegra_chip_id"
+    if os.path.exists(chip_path):
+        try:
+            with open(chip_path, "r") as f:
+                chip_id = f.read().strip()
+            chip_map = {
+                "33": "TX1",
+                "24": "TX2",
+                "25": "Xavier",
+                "35": "Orin",
+            }
+            info["chip"] = chip_map.get(chip_id, f"unknown ({chip_id})")
+            info["is_jetson"] = True
+        except OSError:
+            pass
+
+    jetpack_path = "/etc/nv_tegra_release"
+    if os.path.exists(jetpack_path):
+        try:
+            with open(jetpack_path, "r") as f:
+                info["jetpack_release"] = f.readline().strip()
+        except OSError:
+            pass
+
+    return info
 
 
 def detect_sensor(use_mock_fallback: bool = True):
@@ -35,14 +88,11 @@ def detect_sensor(use_mock_fallback: bool = True):
     """
     system = platform_mod.system()
 
-    # Only try real sensors on Linux (Jetson runs Linux)
     if system == "Linux":
-        # Try direct I2C first
         sensor = _try_i2c_sensor()
         if sensor is not None:
             return sensor
 
-        # Try sysfs fallback
         sensor = _try_sysfs_sensor()
         if sensor is not None:
             return sensor
@@ -59,7 +109,6 @@ def detect_sensor(use_mock_fallback: bool = True):
             system,
         )
 
-    # Fall back to mock
     if use_mock_fallback:
         logger.info("Using mock sensor for development/testing")
         return MockSensor()
@@ -79,7 +128,6 @@ def _try_i2c_sensor():
         from powerlens.sensors.jetson import create_jetson_sensor
         sensor = create_jetson_sensor("orin-nano")
         sensor.open()
-        # Test read to verify it works
         samples = sensor.read_all()
         if len(samples) > 0 and all(s.voltage_v > 0 for s in samples):
             logger.info(
@@ -127,8 +175,14 @@ def get_sensor_info() -> dict:
     Returns a dict with detection results for display/debugging.
     """
     system = platform_mod.system()
+
+    board = detect_jetson_board() if system == "Linux" else {"model": "N/A", "is_jetson": False}
+
     info = {
         "platform": system,
+        "board_model": board.get("model", "unknown"),
+        "board_chip": board.get("chip", "unknown"),
+        "is_jetson": board.get("is_jetson", False),
         "i2c_available": False,
         "i2c_detail": "",
         "sysfs_available": False,
@@ -148,7 +202,6 @@ def get_sensor_info() -> dict:
         info["i2c_detail"] = "smbus2 installed"
     except ImportError:
         info["i2c_detail"] = "smbus2 not installed (pip install smbus2)"
-        # Still check sysfs
         try:
             from powerlens.sensors.sysfs import find_ina3221_hwmon_paths
             paths = find_ina3221_hwmon_paths()

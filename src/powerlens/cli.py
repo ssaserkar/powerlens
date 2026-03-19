@@ -84,6 +84,8 @@ def cmd_detect(args):
     info = get_sensor_info()
 
     print(f"Platform:       {info['platform']}")
+    print(f"Board:          {info.get('board_model', 'unknown')}")
+    print(f"Chip:           {info.get('board_chip', 'unknown')}")
     print()
     print("Sensor backends:")
     print(f"  I2C (direct):   {'YES' if info['i2c_available'] else 'NO'}")
@@ -93,7 +95,6 @@ def cmd_detect(args):
     print(f"  Mock (testing): {'YES' if info['mock_available'] else 'NO'}")
     print()
     print(f"Recommended:      {info['recommended']}")
-    print()
 
     if info["recommended"] == "mock":
         print("No real sensor detected.")
@@ -214,6 +215,20 @@ def cmd_profile(args):
         print(f"  Latency per inference: {report.total_duration_s / report.num_inferences / ipr * 1000:.1f} ms")
 
     print(report.summary())
+    # Energy budget check (for CI/CD integration)
+    if args.max_energy is not None:
+        energy_per_inf = report.mean_energy_j / ipr if ipr > 1 else report.mean_energy_j
+        if energy_per_inf > args.max_energy:
+            print("\n ENERGY BUDGET EXCEEDED")
+            print(f"   Budget:  {args.max_energy:.4f} J/inference")
+            print(f"   Actual:  {energy_per_inf:.4f} J/inference")
+            print(f"   Over by: {((energy_per_inf / args.max_energy) - 1) * 100:.1f}%")
+            sys.exit(1)
+        else:
+            print("\n ENERGY BUDGET OK")
+            print(f"   Budget:  {args.max_energy:.4f} J/inference")
+            print(f"   Actual:  {energy_per_inf:.4f} J/inference")
+            print(f"   Margin:  {((1 - energy_per_inf / args.max_energy)) * 100:.1f}%")
     # Thermal analysis
     thermal_report = None
     if thermal.available:
@@ -697,7 +712,11 @@ def main():
     )
     profile_parser.add_argument("--rate", type=float, default=100.0)
     profile_parser.add_argument("--output", "-o", type=str, default=None)
-
+    profile_parser.add_argument(
+        "--max-energy", type=float, default=None,
+        help="Energy budget in joules. Exit with code 1 if exceeded. "
+             "Use in CI/CD to prevent deploying power-hungry models."
+    )
     # Compare command
     compare_parser = subparsers.add_parser(
         "compare", help="Compare energy efficiency of two models"

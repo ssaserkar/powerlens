@@ -1,3 +1,8 @@
+
+
+Here is the complete updated `README.md` file in raw Markdown:
+
+````markdown
 # ⚡ PowerLens
 
 [![Tests](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml/badge.svg)](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml)
@@ -164,33 +169,102 @@ pip install powerlens[jetson]   # not yet published
 
 ## Usage
 
-### From the Command Line
+### Profile Any Code (Recommended)
 
-| Command | What it does |
-|---------|-------------|
-| `powerlens demo` | Quick demo with simulated sensor |
-| `powerlens demo --real` | Demo with real hardware sensor |
-| `powerlens detect` | Show available sensors |
-| `powerlens profile --onnx model.onnx` | Measure energy of a model |
-| `powerlens compare a.onnx b.onnx` | Compare two models |
-| `powerlens power-modes --onnx model.onnx` | Test all power modes (needs sudo) |
-| `powerlens batch-scaling --onnx model.onnx` | Test energy at different loads |
-
-### From Python
+PowerLens works with any inference framework — PyTorch, TensorFlow, ONNX Runtime, TensorRT, or plain Python:
 
 ```python
 import powerlens
 
-# Profile your own inference code
 with powerlens.context() as ctx:
     for image in test_images:
         ctx.mark_inference_start()
-        result = model.infer(image)
+        result = model.infer(image)    # Any framework, any code
         ctx.mark_inference_end()
 
 report = ctx.report()
 print(report.summary())
 ```
+
+This works with:
+
+- **PyTorch:** `model(input)`
+- **TensorRT:** `context.execute_v2(bindings)`
+- **ONNX Runtime:** `session.run(None, {"input": data})`
+- **TensorFlow Lite:** `interpreter.invoke()`
+- **Any Python function** that does computation
+
+### From the Command Line
+
+For quick TensorRT profiling without writing code:
+
+| Command | What it does |
+|---------|-------------|
+| `powerlens profile --onnx model.onnx` | Measure energy of a TensorRT model |
+| `powerlens compare a.onnx b.onnx` | Compare two models |
+| `powerlens power-modes --onnx model.onnx` | Test all power modes (needs sudo) |
+| `powerlens batch-scaling --onnx model.onnx` | Test energy at different loads |
+| `powerlens demo` | Quick demo with simulated sensor |
+| `powerlens demo --real` | Demo with real hardware sensor |
+| `powerlens detect` | Show available sensors and board info |
+
+### CI/CD Energy Gate
+
+When deploying AI to battery-powered devices or large fleets, you need to catch models that use too much energy before they reach production — not after they drain 10,000 batteries.
+
+PowerLens can act as an automated gate in your CI/CD pipeline. Set an energy budget, and any model that exceeds it fails the build:
+
+```bash
+# Fails the pipeline if model uses more than 0.05J per inference
+powerlens profile --onnx model.onnx --max-energy 0.05 --runs 30
+
+# Exit code 0 = within budget, deploy safely
+# Exit code 1 = over budget, block deployment
+```
+
+Example output when a model exceeds the budget:
+
+```
+❌ ENERGY BUDGET EXCEEDED
+   Budget:  0.0500 J/inference
+   Actual:  0.1500 J/inference
+   Over by: 200.0%
+```
+
+Example output when a model passes:
+
+```
+✅ ENERGY BUDGET OK
+   Budget:  0.0500 J/inference
+   Actual:  0.0100 J/inference
+   Margin:  80.0%
+```
+
+Use this in GitHub Actions:
+
+```yaml
+# .github/workflows/energy-check.yml
+- name: Check model energy budget
+  run: |
+    pip install powerlens
+    powerlens profile --onnx model.onnx --max-energy 0.05 --runs 30
+```
+
+Or GitLab CI:
+
+```yaml
+energy_check:
+  script:
+    - pip install powerlens
+    - powerlens profile --onnx model.onnx --max-energy 0.05 --runs 30
+  allow_failure: false
+```
+
+This lets your team set energy budgets per device:
+
+- **Drone** (5000mAh battery): `--max-energy 0.02` (need thousands of inferences per charge)
+- **Security camera** (wall power): `--max-energy 0.5` (power cost matters at fleet scale)
+- **Robot arm** (large battery): `--max-energy 0.1` (balance between accuracy and runtime)
 
 ### Example Output
 
@@ -243,12 +317,10 @@ GPU Utilization
 |------|-------------|----------------|
 | **tegrastats** | Shows total power once per second | Can't measure per-inference energy |
 | **jtop** | Pretty dashboard with power and GPU stats | No per-inference correlation |
-| **[Zeus](https://github.com/ml-energy/zeus)** | Multi-platform energy measurement + optimization for PyTorch | No TensorRT support, no per-rail breakdown, no thermal monitoring, no power mode comparison |
-| **[EcoEdgeInfer](https://github.com/PACELab/EcoEdgeInfer)** | Energy optimization for edge inference via DVFS tuning | No measurement CLI, no thermal monitoring, abandoned (2 years), no TensorRT profiling |
-| **[PowerSensor3](https://github.com/nlesc-recruit/PowerSensor3)** | Very accurate power with custom hardware at 20kHz | Requires buying/building extra hardware, no AI workload awareness |
-| **[powertool](https://github.com/nmenon/powertool)** | Raw INA reads for TI boards | Abandoned (5 years), no Jetson, no AI awareness |
+| **PowerSensor3** | Very accurate power with custom hardware | Requires buying/building extra hardware |
 | **Nsight Systems** | GPU compute profiling | No power measurement |
-| **PowerLens** | **Per-inference energy + per-rail breakdown + thermal + GPU util + power mode comparison from one CLI** | Jetson only, no PyTorch hooks yet |
+| **PowerLens** | Per-inference energy with power + thermal + GPU in one report | Requires Jetson for real measurements |
+
 ---
 
 ## Run the Full Showcase
@@ -272,6 +344,47 @@ python full_showcase.py             # Runs full 3-part analysis (~5 minutes)
 4. Calculates energy by integrating power over time for each inference
 5. Monitors GPU utilization and temperature simultaneously
 6. Produces reports, CSVs, and plots
+
+---
+
+## Measurement Methodology
+
+### How PowerLens handles fast inferences
+
+PowerLens samples power sensors at 100Hz (every 10ms) via sysfs. Many AI models run faster than 10ms per inference — for example, ResNet18 on Orin Nano runs in ~1.3ms.
+
+**You cannot measure the energy of a single 1.3ms inference with a 10ms sensor.**
+
+PowerLens handles this by automatically batching: it runs the model N times in a continuous loop, measures total energy over the entire loop using trapezoidal integration, then divides by N to get average energy per inference. The number of iterations is auto-tuned so each measurement window is approximately 100ms — long enough for 10+ power samples.
+
+```
+Example: ResNet18 (1.3ms per inference)
+→ Auto-detected: 77 iterations per measurement window
+→ Window duration: ~100ms
+→ Power samples per window: ~10
+→ Energy per window: measured via trapezoidal integration
+→ Energy per inference: window energy ÷ 77
+```
+
+This approach is standard in power measurement literature (see [PowerSensor3](https://arxiv.org/pdf/2504.17883), Section 4.2) and is mathematically equivalent to measuring a single long inference, because power draw is continuous and the sensor captures the sustained load profile.
+
+**Limitations:**
+
+- Cannot capture per-inference power *transients* for sub-10ms models
+- Reports average energy per inference, not instantaneous
+- For models faster than 1ms, energy resolution decreases
+- For precise transient analysis, use external hardware like PowerSensor3 (20kHz)
+
+**When this matters:**
+
+- If all your inferences are identical (same model, same input size), the average is accurate
+- If your inferences vary significantly (different input sizes, dynamic models), the average may mask per-inference variation
+
+**When to use external hardware instead:**
+
+- You need to see power spikes within a single inference
+- Your inference is <1ms and you need precise energy numbers
+- You are doing hardware validation, not deployment optimization
 
 ---
 
@@ -308,23 +421,12 @@ powerlens/
 
 ## Related Work
 
-### Energy Measurement Frameworks
-- **[Zeus](https://github.com/ml-energy/zeus)** (UMich, NVIDIA, Meta) — Multi-platform deep learning energy measurement and optimization. Supports NVIDIA/AMD GPU, CPU, DRAM, Apple Silicon, and Jetson. PyTorch-centric with training optimization. [NSDI'23 paper](https://www.usenix.org/conference/nsdi23/presentation/you), [SOSP'24 paper](https://dl.acm.org/doi/10.1145/3694715.3695971). PowerLens complements Zeus by providing TensorRT-native profiling, per-rail power breakdown, thermal monitoring, and power mode comparison — features specific to Jetson deployment workflows.
+- [Chakraborty et al. (2024)](https://arxiv.org/html/2508.08430v1) — Profiling concurrent vision inference on Jetson (compute-level)
+- [Li & Zheng (2022)](https://par.nsf.gov/servlets/purl/10208378) — Profiling Jetson GPU devices for autonomous machines
+- [Van der Vlugt et al. (2024)](https://arxiv.org/pdf/2504.17883) — PowerSensor3: high-accuracy external power measurement
+- [powertool](https://github.com/nmenon/powertool) — INA226 power measurement for TI boards
 
-### Edge AI Energy Optimization
-- **[EcoEdgeInfer](https://github.com/PACELab/EcoEdgeInfer)** (Stony Brook University) — Adaptive optimization of energy and latency for DNN inference on edge devices via DVFS tuning. [SEC'24 paper](https://doi.org/10.1109/SEC62691.2024.00023). Focuses on finding optimal hardware configurations rather than measurement and reporting.
-
-### Hardware Power Measurement
-- **[PowerSensor3](https://github.com/nlesc-recruit/PowerSensor3)** (ASTRON, Netherlands) — Custom hardware toolkit achieving 20kHz power sampling. Lab-grade accuracy but requires additional hardware purchase and physical installation. [Paper](https://arxiv.org/pdf/2504.17883).
-- **[powertool](https://github.com/nmenon/powertool)** (TI) — C-based INA226 reader for TI development boards. Abandoned since 2019, no AI workload awareness.
-
-### Jetson Profiling Studies
-- [Chakraborty et al. (2024)](https://arxiv.org/html/2508.08430v1) — Profiling concurrent vision inference on Jetson at the compute level (SM utilization, tensor cores). No hardware power measurement.
-- [Li & Zheng (2022)](https://par.nsf.gov/servlets/purl/10208378) — Profiling Jetson TX2 using tegrastats and Nsight. Used existing tools, no new tool built.
-
-### Where PowerLens Fits
-
-PowerLens fills a specific gap: **one-command energy profiling for TensorRT deployments on Jetson** with per-rail power breakdown, thermal monitoring, GPU utilization correlation, and power mode comparison. It is not a replacement for Zeus (which covers more platforms and optimizes training) but a complementary tool for edge deployment engineers who need quick, hardware-level energy answers from the command line.
+PowerLens fills the gap: per-inference energy measurement using built-in sensors with zero extra hardware.
 
 ---
 
@@ -359,3 +461,4 @@ If PowerLens helps your research:
   url={https://github.com/ssaserkar/powerlens}
 }
 ```
+````

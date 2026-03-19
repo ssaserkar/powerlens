@@ -41,3 +41,8 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest tests/ --cov=powerlens --cov-report=term-missing
+      
+      # Example GitHub Actions step:
+      - name: Energy budget check
+        run: |
+          powerlens profile --onnx model.onnx --max-energy 0.05 --runs 30
