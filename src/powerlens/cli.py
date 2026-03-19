@@ -204,7 +204,7 @@ def cmd_profile(args):
         gpu_monitor.stop()
 
     report = ctx.report()
-    samples = ctx._sampler.get_samples()
+    ctx._sampler.get_samples()
 
     # Adjust energy per single inference
     if ipr > 1:
