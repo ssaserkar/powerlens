@@ -347,7 +347,7 @@ If PowerLens helps your research, please cite:
 ```bibtex
 @software{powerlens2025,
   title={PowerLens: Per-Inference Energy Profiling for NVIDIA Jetson},
-  author={Saserkar, S.},
+  author={Aserkar, S.},
   year={2025},
   url={https://github.com/ssaserkar/powerlens}
 }
