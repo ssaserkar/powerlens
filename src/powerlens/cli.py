@@ -215,6 +215,7 @@ def cmd_profile(args):
 
     print(report.summary())
     # Thermal analysis
+    thermal_report = None
     if thermal.available:
         thermal_report = thermal.analyze(
             energy_report=report,
@@ -236,7 +237,17 @@ def cmd_profile(args):
     print()
 
     if args.output:
-        _export_results(report, samples, args.output, f"PowerLens — {model_name}")
+        # Generate text report
+        from powerlens.export.report import generate_text_report
+        report_path = generate_text_report(
+            report=report,
+            thermal_report=thermal_report if thermal.available else None,
+            gpu_summary=gpu_monitor.get_summary() if gpu_monitor.available else None,
+            model_name=model_name,
+            platform="Jetson Orin Nano",
+            output_path=os.path.join(args.output, "powerlens_report.txt"),
+        )
+        print(f"Report:      {report_path}")
 
 
 def cmd_compare(args):

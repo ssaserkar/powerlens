@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "powerlens"
-version = "0.1.2"
+version = "0.1.3"
 description = "Per-inference energy profiling for AI workloads on NVIDIA Jetson"
 readme = "README.md"
 license = {text = "Apache-2.0"}
