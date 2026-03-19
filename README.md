@@ -1,8 +1,3 @@
-
-
-Here is the complete updated `README.md` file in raw Markdown:
-
-````markdown
 # ⚡ PowerLens
 
 [![Tests](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml/badge.svg)](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml)
@@ -461,4 +456,3 @@ If PowerLens helps your research:
   url={https://github.com/ssaserkar/powerlens}
 }
 ```
-````
