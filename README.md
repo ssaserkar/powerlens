@@ -1,7 +1,7 @@
 # ⚡ PowerLens
 
 [![Tests](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml/badge.svg)](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml)
-[![PyPI](https://img.shields.io/pypi/v/powerlens.svg)](https://pypi.org/project/powerlens/)
+[![PyPI](https://img.shields.io/badge/PyPI-pending-yellow.svg)](https://github.com/ssaserkar/powerlens)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -136,15 +136,28 @@ Throttling:      None detected ✓
 
 ## Install
 
+### From Source (recommended for now)
+
 ```bash
-pip install powerlens
+git clone https://github.com/ssaserkar/powerlens.git
+cd powerlens
+pip install -e .
 ```
 
 On Jetson:
 
 ```bash
-pip install powerlens[jetson]
+git clone https://github.com/ssaserkar/powerlens.git
+cd powerlens
+pip install -e ".[jetson]"
 powerlens detect    # check sensors are working
+```
+
+### From PyPI (coming soon)
+
+```bash
+pip install powerlens           # not yet published
+pip install powerlens[jetson]   # not yet published
 ```
 
 ---
