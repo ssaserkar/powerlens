@@ -5,54 +5,105 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**Measure the energy cost of AI inference on NVIDIA Jetson — no extra hardware needed.**
+**How much energy does your AI model actually use? PowerLens tells you.**
 
-PowerLens reads the Jetson's built-in INA3221 power sensors via sysfs, correlates power measurements with individual AI inference events, and computes **joules per inference** — the metric that tells you how energy-efficient your model actually is.
+PowerLens measures the real power consumption of AI models running on NVIDIA Jetson devices. It reads the built-in hardware power sensors and tells you exactly how many joules each inference costs — no extra equipment needed.
 
-**Validated on Jetson Orin Nano. Readings match tegrastats within 2%.**
+**Tested on real hardware. Matches NVIDIA's own measurements within 2%.**
 
 ---
 
-## What Makes PowerLens Different
+## The Problem
 
-No other tool does this from the command line:
+You know how fast your model runs. You know how accurate it is. But do you know how much electricity it uses per inference?
+
+If you're running AI on battery-powered devices (robots, drones, cameras), energy per inference decides how long your device stays alive. If you're deploying thousands of Jetson devices, it decides your electricity bill.
+
+Existing tools like `tegrastats` show you total power once per second. They can't tell you how much energy a single inference costs, or which of your two models is more efficient.
+
+**PowerLens can.**
+
+---
+
+## What It Does
 
 ```bash
-# Profile a TensorRT model's energy consumption
+# Measure energy consumption of any ONNX model
 powerlens profile --onnx model.onnx --runs 50
 
-# Compare two models side-by-side
+# Compare two models — which one is more efficient?
 powerlens compare model_a.onnx model_b.onnx
 
-# Find the most energy-efficient power mode
+# Test all power modes — which setting saves the most energy?
 sudo powerlens power-modes --onnx model.onnx
 
-# Analyze energy scaling with iteration count
-powerlens batch-scaling --onnx model.onnx --batches 1,10,50,100
+# Check what sensors are available
+powerlens detect
 ```
 
 ---
 
-## Real Results from Jetson Orin Nano
+## Real Measurements from Jetson Orin Nano
 
-### Model Complexity vs Energy
+Everything below is real data from a Jetson Orin Nano running MAXN_SUPER mode. Not simulated. Each test started after thermal cooldown to 40°C for consistent results.
 
-Tested with custom conv nets (light/medium/heavy) on Jetson Orin Nano MAXN_SUPER mode:
+### Three Models, Three Power Profiles
+
+We tested three models of increasing size to show how model complexity affects energy:
+
+| Model  | Size   | Inference Time | Energy per Inference | Average Power | GPU Usage | Max GPU Temp |
+|--------|--------|----------------|----------------------|---------------|-----------|--------------|
+| Small  | 0.5 MB | 1.3 ms         | 0.010 J              | 13.6 W        | 58%       | 41.6°C       |
+| Medium | 11 MB  | 7.1 ms         | 0.150 J              | 32.8 W        | 70%       | 46.5°C       |
+| Large  | 81 MB  | 33.4 ms        | 1.281 J              | 35.3 W        | 75%       | 49.9°C       |
+
+**The large model uses 128x more energy per inference than the small model.**
+
+![Model Comparison](docs/images/model_comparison.png)
+
+### Where Does the Power Go?
+
+PowerLens breaks down power by rail — GPU, CPU, and system — so you can see exactly where the energy is spent. Each model has its own distinct power signature:
+
+**Small Model** — barely wakes the GPU:
+
+![Small Model Power Trace](docs/images/power_trace_light.png)
+
+**Medium Model** — GPU fully engaged:
+
+![Medium Model Power Trace](docs/images/power_trace_medium.png)
+
+**Large Model** — GPU saturated, drawing maximum power:
+
+![Large Model Power Trace](docs/images/power_trace_heavy.png)
+
+### All Three Models Overlaid
+
+Same time scale, showing the dramatic difference in power draw:
+
+![All Power Traces](docs/images/power_traces.png)
+
+### How GPU Load Affects Energy
+
+Running more iterations back-to-back pushes GPU utilization from 51% to 97% and increases power from 28.5W to 38.0W:
+
+| Iterations | Energy/Inference | Average Power | GPU Utilization |
+|------------|------------------|---------------|-----------------|
+| 1          | 0.933 J          | 28.5 W        | 51%             |
+| 5          | 1.289 J          | 35.2 W        | 72%             |
+| 10         | 1.413 J          | 37.1 W        | 84%             |
+| 25         | 1.478 J          | 37.6 W        | 94%             |
+| 50         | 1.505 J          | 37.9 W        | 95%             |
+| 100        | 1.518 J          | 38.0 W        | 97%             |
+
+![Iteration Scaling](docs/images/iteration_scaling.png)
+
+### Which Power Mode Is Most Efficient?
+
+Jetson has multiple power modes. PowerLens tests them all automatically:
 
 ```
-Model    Latency   Energy/inf    Avg Power   Peak Power   GPU Util
-----------------------------------------------------------------------
-     light       1.3ms      0.011J       11.5W       11.8W       22%
-    medium       7.2ms      0.130J       30.0W       31.6W       57%
-     heavy      33.5ms      1.060J       31.8W       33.3W       54%
-
-→ Heavy model uses 97.7x more energy per inference than light model
-```
-
-### Power Mode Comparison (ResNet18 FP16)
-
-```
-Power Mode Comparison
+Power Mode Comparison — ResNet18
 ======================================================================
 Mode               Latency   Energy/inf    Avg Power   Efficiency
 ----------------------------------------------------------------------
@@ -60,25 +111,77 @@ Mode               Latency   Energy/inf    Avg Power   Efficiency
 25W                   2.9ms      0.015J       11.8W       69.1 inf/J
 MAXN_SUPER            2.9ms      0.015J       12.1W       65.4 inf/J
 ----------------------------------------------------------------------
-Most efficient: 25W (69.1 inf/J)
+Most efficient: 25W mode
 
-→ 25W mode is more energy efficient than MAXN_SUPER for this model
+→ 25W mode is more energy efficient than max performance mode
 ```
 
-### Sustained GPU Stress (90 seconds)
+### 150-Second Stress Test
+
+Running the large model continuously for 150 seconds. GPU temperature rises 10°C while power stays stable:
+
+![Sustained Timeline](docs/images/sustained_timeline.png)
+
+![Sustained Power Trace](docs/images/sustained_power_trace.png)
 
 ```
-Idle: 10.4W → Load: 37.0W (255% increase)
-GPU: 60.8°C → 63.3°C (+2.5°C over 90s)
-GPU utilization: avg 95%, freq 1020MHz sustained
-Throttling: NO ✓
+Idle power:      10.4 W
+Load power:      37.4 W average (255% increase)
+GPU temperature: 52.5°C → 62.5°C (+10°C over 150 seconds)
+GPU frequency:   1020 MHz sustained
+Throttling:      None detected ✓
 ```
 
-### TensorRT Profiling with Full Telemetry
+---
+
+## Install
+
+```bash
+pip install powerlens
+```
+
+On Jetson:
+
+```bash
+pip install powerlens[jetson]
+powerlens detect    # check sensors are working
+```
+
+---
+
+## Usage
+
+### From the Command Line
+
+| Command | What it does |
+|---------|-------------|
+| `powerlens demo` | Quick demo with simulated sensor |
+| `powerlens demo --real` | Demo with real hardware sensor |
+| `powerlens detect` | Show available sensors |
+| `powerlens profile --onnx model.onnx` | Measure energy of a model |
+| `powerlens compare a.onnx b.onnx` | Compare two models |
+| `powerlens power-modes --onnx model.onnx` | Test all power modes (needs sudo) |
+| `powerlens batch-scaling --onnx model.onnx` | Test energy at different loads |
+
+### From Python
+
+```python
+import powerlens
+
+# Profile your own inference code
+with powerlens.context() as ctx:
+    for image in test_images:
+        ctx.mark_inference_start()
+        result = model.infer(image)
+        ctx.mark_inference_end()
+
+report = ctx.report()
+print(report.summary())
+```
+
+### Example Output
 
 ```
-powerlens profile --onnx resnet18.onnx --runs 20
-
 PowerLens Inference Energy Report
 ==========================================
 Inferences:         20
@@ -110,171 +213,50 @@ GPU Utilization
 
 ---
 
-## Quick Start
+## What It Measures
 
-```bash
-pip install powerlens
-```
-
-### On Jetson — Profile a TensorRT Model
-
-```bash
-pip install powerlens[jetson]
-powerlens detect                          # Check available sensors
-powerlens profile --onnx model.onnx       # Profile your model
-powerlens compare a.onnx b.onnx           # Compare two models
-```
-
-### On Any Machine — Development with Mock Sensor
-
-```bash
-powerlens demo --runs 20 --output results/
-```
-
-### Python API — Profile Your Own Code
-
-```python
-import powerlens
-
-# Simple: context manager
-with powerlens.context() as ctx:
-    for image in test_images:
-        ctx.mark_inference_start()
-        result = model.infer(image)
-        ctx.mark_inference_end()
-
-report = ctx.report()
-print(report.summary())
-```
-
-```python
-# Even simpler: one-call profiling
-report = powerlens.profile(num_runs=50, real_workload=True)
-print(report.summary())
-```
+- **Energy per inference** — how many joules each inference costs
+- **Power per rail** — GPU, CPU, and system power separately
+- **GPU utilization** — how busy the GPU is during inference
+- **GPU clock speed** — current frequency in MHz
+- **Temperature** — 9 thermal zones including GPU and CPU
+- **Thermal throttling** — detects when heat causes performance drops
 
 ---
 
-## CLI Commands
+## How Is This Different?
 
-| Command | Description |
-|---------|-------------|
-| `powerlens demo` | Run demo with mock or real sensor |
-| `powerlens demo --real` | Run with real sensor + CPU stress workload |
-| `powerlens detect` | Detect available power sensors |
-| `powerlens profile --onnx model.onnx` | Profile TensorRT model energy |
-| `powerlens compare a.onnx b.onnx` | Compare energy efficiency of two models |
-| `powerlens power-modes --onnx model.onnx` | Profile across Jetson power modes (needs sudo) |
-| `powerlens batch-scaling --onnx model.onnx` | Analyze energy scaling with iteration count |
+| Tool | What it does | What's missing |
+|------|-------------|----------------|
+| **tegrastats** | Shows total power once per second | Can't measure per-inference energy |
+| **jtop** | Pretty dashboard with power and GPU stats | No per-inference correlation |
+| **PowerSensor3** | Very accurate power with custom hardware | Requires buying/building extra hardware |
+| **Nsight Systems** | GPU compute profiling | No power measurement |
+| **PowerLens** | Per-inference energy with power + thermal + GPU in one report | Requires Jetson for real measurements |
+
+---
+
+## Run the Full Showcase
+
+Generate demo models and run the complete analysis yourself:
+
+```bash
+cd examples/
+python create_demo_model.py         # Creates small/medium/large models
+python generate_readme_plots.py     # Generates all plots (~10 minutes)
+python full_showcase.py             # Runs full 3-part analysis (~5 minutes)
+```
 
 ---
 
 ## How It Works
 
-1. **Sensor Layer:** Reads INA3221 power monitor via sysfs with auto-detected rail names (VDD_IN, VDD_CPU_GPU_CV, VDD_SOC)
-2. **Sampler:** Background thread captures power at 100Hz
-3. **GPU Monitor:** Reads GPU utilization % and clock frequency from sysfs
-4. **Thermal Monitor:** Reads 9 thermal zones, detects throttling events
-5. **Profiler:** Wraps your inference code, recording start/end timestamps
-6. **Analysis:** Aligns power samples with inference events, integrates power over time using trapezoidal rule to compute energy (joules)
-7. **TensorRT Runner:** Automatically builds engines from ONNX, manages CUDA memory, handles dynamic iteration counts
-
-```
-Power (W)
-38 ┤     ╭────────────────────────────╮
-30 ┤   ╭─╯  GPU inference running     ╰─╮
-20 ┤  ╭╯                                ╰╮
-10 ┤──╯  idle                       idle  ╰──
-   └──────────────────────────────────────── Time
-        ↑ 10.4W                    37.0W ↑
-```
-
----
-
-## Features
-
-### Power Measurement
-
-- **Per-inference energy:** Joules per inference via trapezoidal integration
-- **Per-rail breakdown:** VDD_IN, VDD_CPU_GPU_CV, VDD_SOC measured separately
-- **Auto-detected rail names:** Reads sysfs label files, no hardcoding
-- **Background sampling:** Non-blocking 100Hz power measurement
-- **Idle baseline:** Automatic idle power measurement for accurate net energy
-- **Validated:** Matches tegrastats within 2%
-
-### GPU Monitoring
-
-- **GPU utilization %:** Real-time from sysfs
-- **GPU clock frequency:** Current MHz from devfreq
-- **Correlated with power:** See how GPU load affects energy
-
-### Thermal Analysis
-
-- **9 thermal zones:** CPU, GPU, SoC, junction temperature
-- **Throttle detection:** Alerts when temperature exceeds threshold
-- **Correlated with energy:** Detects when throttling increases energy per inference
-
-### TensorRT Integration
-
-- **One-command profiling:** `powerlens profile --onnx model.onnx`
-- **Auto engine building:** Builds TensorRT FP16 engines from ONNX
-- **Auto iteration tuning:** Detects optimal iterations per run for energy resolution
-- **Model comparison:** Side-by-side energy efficiency comparison
-- **Power mode sweep:** Profiles across all Jetson nvpmodel modes
-- **No pycuda dependency:** Uses ctypes for CUDA memory management
-
-### Output
-
-- **CSV export:** Per-inference summary and raw power samples
-- **Power trace plots:** Publication-quality matplotlib visualizations
-- **Comparison tables:** Model vs model, mode vs mode
-- **Timeline data:** Temperature, power, GPU util over time
-
-### Development
-
-- **Mock sensor:** Full development and testing without Jetson hardware
-- **39 tests:** Covering sensors, sampler, energy analysis, session API
-- **CI:** GitHub Actions on Python 3.9, 3.10, 3.11
-- **Cross-platform:** Develop on Windows/Mac, deploy on Jetson
-
----
-
-## Requirements
-
-- Python 3.9+
-- NVIDIA Jetson (Orin Nano, AGX Orin) for real measurements
-- TensorRT (included with JetPack) for model profiling
-- Works on any platform with mock sensor for development
-
-### Jetson Setup
-
-```bash
-pip install powerlens[jetson]
-sudo usermod -aG i2c $USER  # then re-login
-powerlens detect             # verify sensors
-```
-
----
-
-## How is this different from...
-
-| Tool | What it does | What PowerLens adds |
-|------|-------------|---------------------|
-| **tegrastats/jtop** | System power at ~1Hz | Per-inference energy, 100Hz sampling, workload correlation, GPU util |
-| **PowerSensor3** | Lab-grade measurement with custom hardware at 20kHz | No hardware needed, AI-native, pip-installable, model comparison |
-| **powertool** | Raw INA reads via external I2C adapter | Jetson-native, AI workload awareness, TensorRT integration |
-| **Nsight Systems** | GPU compute profiling | Hardware-level power + thermal + GPU util in one report |
-
----
-
-## Related Work
-
-- [Chakraborty et al. (2024)](https://doi.org/) — Profiling concurrent vision inference on Jetson (compute-level)
-- [Li & Zheng (2022)](https://doi.org/) — Profiling Jetson GPU devices for autonomous machines
-- [Van der Vlugt et al. (2024)](https://doi.org/) — PowerSensor3: high-accuracy external power measurement
-- [powertool](https://github.com/) — INA226 power measurement for TI boards
-
-PowerLens complements these by providing per-inference energy measurement with GPU utilization and thermal correlation using on-board sensors with zero additional hardware.
+1. Reads power sensors built into the Jetson board (INA3221 via sysfs)
+2. Samples power 100 times per second in a background thread
+3. Records when each inference starts and ends
+4. Calculates energy by integrating power over time for each inference
+5. Monitors GPU utilization and temperature simultaneously
+6. Produces reports, CSVs, and plots
 
 ---
 
@@ -283,54 +265,53 @@ PowerLens complements these by providing per-inference energy measurement with G
 ```
 powerlens/
 ├── src/powerlens/
-│   ├── sensors/          # INA3221, sysfs, mock, auto-detection, GPU monitor
-│   ├── profiler/         # Sampler, session API, TensorRT runner
-│   ├── analysis/         # Energy computation, thermal, power modes, batch scaling
-│   ├── export/           # CSV export
-│   ├── visualization/    # Matplotlib power trace plots
-│   └── cli.py            # 7 CLI commands
-├── tests/                # 39 tests
-├── examples/
-│   ├── demo_mock.py          # Mock sensor demo
-│   ├── quickstart.py         # Profile your own code
-│   ├── demo_tensorrt.py      # TensorRT profiling
-│   ├── create_demo_model.py  # Generate light/medium/heavy models
-│   └── full_showcase.py      # Complete 3-part showcase
-└── docs/
+│   ├── sensors/        # Power sensors, GPU monitor
+│   ├── profiler/       # Sampling, session API, TensorRT runner
+│   ├── analysis/       # Energy, thermal, power modes, batch scaling
+│   ├── export/         # CSV export
+│   ├── visualization/  # Power trace plots
+│   └── cli.py          # All CLI commands
+├── tests/              # 39 tests
+└── examples/
+    ├── quickstart.py               # Profile your own code
+    ├── demo_tensorrt.py            # TensorRT profiling
+    ├── create_demo_model.py        # Generate test models
+    ├── generate_readme_plots.py    # Generate all plots
+    └── full_showcase.py            # Complete analysis
 ```
 
 ---
 
-## Full Showcase
+## Requirements
 
-Generate demo models and run the complete analysis:
+- Python 3.9+
+- NVIDIA Jetson for real measurements (Orin Nano, AGX Orin)
+- TensorRT for model profiling (included with JetPack)
+- Works anywhere with mock sensor for development
 
-```bash
-cd examples/
-python create_demo_model.py    # Creates light/medium/heavy ONNX models
-python full_showcase.py        # Runs all 3 parts (~3 minutes)
-```
+---
 
-Produces:
+## Related Work
 
-- Model comparison CSV and power trace plots
-- Iteration scaling analysis
-- 90-second sustained thermal stress test with timeline data
-- 15 output files (CSVs, PNGs, timeline data)
+- [Chakraborty et al. (2024)](https://arxiv.org/html/2508.08430v1) — Profiling concurrent vision inference on Jetson (compute-level)
+- [Li & Zheng (2022)](https://par.nsf.gov/servlets/purl/10208378) — Profiling Jetson GPU devices for autonomous machines
+- [Van der Vlugt et al. (2024)](https://arxiv.org/pdf/2504.17883) — PowerSensor3: high-accuracy external power measurement
+- [powertool](https://github.com/nmenon/powertool) — INA226 power measurement for TI boards
+
+PowerLens fills the gap: per-inference energy measurement using built-in sensors with zero extra hardware.
 
 ---
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Areas where help is needed:**
+**Help needed with:**
 
-- Sensor support for other Jetson platforms (Xavier NX, AGX Orin, TX2)
-- PyTorch inference hook for automatic profiling
-- Real-time terminal dashboard (TUI)
+- Support for other Jetson boards (Xavier NX, AGX Orin, TX2)
+- PyTorch inference hooks
+- Real-time terminal dashboard
 - PDF report generation
-- MLflow / Weights & Biases integration
 
 ---
 
@@ -342,7 +323,7 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Citation
 
-If PowerLens helps your research, please cite:
+If PowerLens helps your research:
 
 ```bibtex
 @software{powerlens2025,
