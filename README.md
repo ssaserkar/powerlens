@@ -312,9 +312,12 @@ GPU Utilization
 |------|-------------|----------------|
 | **tegrastats** | Shows total power once per second | Can't measure per-inference energy |
 | **jtop** | Pretty dashboard with power and GPU stats | No per-inference correlation |
-| **PowerSensor3** | Very accurate power with custom hardware | Requires buying/building extra hardware |
+| **[Zeus](https://github.com/ml-energy/zeus)** | Multi-platform energy measurement + optimization for PyTorch | No TensorRT support, no per-rail breakdown, no thermal monitoring, no power mode comparison |
+| **[EcoEdgeInfer](https://github.com/PACELab/EcoEdgeInfer)** | Energy optimization for edge inference via DVFS tuning | No measurement CLI, no thermal monitoring, abandoned (2 years), no TensorRT profiling |
+| **[PowerSensor3](https://github.com/nlesc-recruit/PowerSensor3)** | Very accurate power with custom hardware at 20kHz | Requires buying/building extra hardware, no AI workload awareness |
+| **[powertool](https://github.com/nmenon/powertool)** | Raw INA reads for TI boards | Abandoned (5 years), no Jetson, no AI awareness |
 | **Nsight Systems** | GPU compute profiling | No power measurement |
-| **PowerLens** | Per-inference energy with power + thermal + GPU in one report | Requires Jetson for real measurements |
+| **PowerLens** | **Per-inference energy + per-rail breakdown + thermal + GPU util + power mode comparison from one CLI** | Jetson only, no PyTorch hooks yet |
 
 ---
 
@@ -416,12 +419,23 @@ powerlens/
 
 ## Related Work
 
-- [Chakraborty et al. (2024)](https://arxiv.org/html/2508.08430v1) — Profiling concurrent vision inference on Jetson (compute-level)
-- [Li & Zheng (2022)](https://par.nsf.gov/servlets/purl/10208378) — Profiling Jetson GPU devices for autonomous machines
-- [Van der Vlugt et al. (2024)](https://arxiv.org/pdf/2504.17883) — PowerSensor3: high-accuracy external power measurement
-- [powertool](https://github.com/nmenon/powertool) — INA226 power measurement for TI boards
+### Energy Measurement Frameworks
+- **[Zeus](https://github.com/ml-energy/zeus)** (UMich, NVIDIA, Meta) — Multi-platform deep learning energy measurement and optimization. Supports NVIDIA/AMD GPU, CPU, DRAM, Apple Silicon, and Jetson. PyTorch-centric with training optimization. [NSDI'23 paper](https://www.usenix.org/conference/nsdi23/presentation/you), [SOSP'24 paper](https://dl.acm.org/doi/10.1145/3694715.3695971). PowerLens complements Zeus by providing TensorRT-native profiling, per-rail power breakdown, thermal monitoring, and power mode comparison — features specific to Jetson deployment workflows.
 
-PowerLens fills the gap: per-inference energy measurement using built-in sensors with zero extra hardware.
+### Edge AI Energy Optimization
+- **[EcoEdgeInfer](https://github.com/PACELab/EcoEdgeInfer)** (Stony Brook University) — Adaptive optimization of energy and latency for DNN inference on edge devices via DVFS tuning. [SEC'24 paper](https://doi.org/10.1109/SEC62691.2024.00023). Focuses on finding optimal hardware configurations rather than measurement and reporting.
+
+### Hardware Power Measurement
+- **[PowerSensor3](https://github.com/nlesc-recruit/PowerSensor3)** (ASTRON, Netherlands) — Custom hardware toolkit achieving 20kHz power sampling. Lab-grade accuracy but requires additional hardware purchase and physical installation. [Paper](https://arxiv.org/pdf/2504.17883).
+- **[powertool](https://github.com/nmenon/powertool)** (TI) — C-based INA226 reader for TI development boards. Abandoned since 2019, no AI workload awareness.
+
+### Jetson Profiling Studies
+- [Chakraborty et al. (2024)](https://arxiv.org/html/2508.08430v1) — Profiling concurrent vision inference on Jetson at the compute level (SM utilization, tensor cores). No hardware power measurement.
+- [Li & Zheng (2022)](https://par.nsf.gov/servlets/purl/10208378) — Profiling Jetson TX2 using tegrastats and Nsight. Used existing tools, no new tool built.
+
+### Where PowerLens Fits
+
+PowerLens fills a specific gap: **one-command energy profiling for TensorRT deployments on Jetson** with per-rail power breakdown, thermal monitoring, GPU utilization correlation, and power mode comparison. It is not a replacement for Zeus (which covers more platforms and optimizes training) but a complementary tool for edge deployment engineers who need quick, hardware-level energy answers from the command line.
 
 ---
 
