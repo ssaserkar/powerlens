@@ -364,25 +364,19 @@ Example: ResNet18 (1.3ms per inference)
 → Energy per inference: window energy ÷ 77
 ```
 
-This approach is standard in power measurement literature (see [PowerSensor3](https://arxiv.org/pdf/2504.17883), Section 4.2) and is mathematically equivalent to measuring a single long inference, because power draw is continuous and the sensor captures the sustained load profile.
+This works because power draw is continuous — the sensor captures the sustained load profile across the entire batch, and dividing total energy by iteration count gives accurate average energy per inference.
 
 **Limitations:**
 
-- Cannot capture per-inference power *transients* for sub-10ms models
+- Cannot capture per-inference power transients for sub-10ms models
 - Reports average energy per inference, not instantaneous
 - For models faster than 1ms, energy resolution decreases
-- For precise transient analysis, use external hardware like PowerSensor3 (20kHz)
+- For precise transient analysis, use external hardware like [PowerSensor3](https://github.com/nlesc-recruit/PowerSensor3) which samples at 20kHz
 
 **When this matters:**
 
 - If all your inferences are identical (same model, same input size), the average is accurate
 - If your inferences vary significantly (different input sizes, dynamic models), the average may mask per-inference variation
-
-**When to use external hardware instead:**
-
-- You need to see power spikes within a single inference
-- Your inference is <1ms and you need precise energy numbers
-- You are doing hardware validation, not deployment optimization
 
 ---
 
