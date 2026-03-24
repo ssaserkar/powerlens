@@ -34,6 +34,7 @@ class GpuSample:
 _GPU_LOAD_PATHS = [
     "/sys/devices/gpu.0/load",
     "/sys/devices/platform/gpu.0/load",
+    "/sys/devices/platform/bus@0/17000000.gpu/load"
 ]
 
 _GPU_FREQ_PATHS = [

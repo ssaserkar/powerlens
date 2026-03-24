@@ -205,14 +205,8 @@ def cmd_profile(args):
         gpu_monitor.stop()
 
     report = ctx.report()
+    report.iterations_per_run = ipr
     ctx._sampler.get_samples()
-
-    # Adjust energy per single inference
-    if ipr > 1:
-        print(f"\nNote: Each run = {ipr} iterations")
-        print(f"  Energy per run:        {report.mean_energy_j:.4f} J")
-        print(f"  Energy per inference:  {report.mean_energy_j / ipr:.4f} J")
-        print(f"  Latency per inference: {report.total_duration_s / report.num_inferences / ipr * 1000:.1f} ms")
 
     print(report.summary())
     # Energy budget check (for CI/CD integration)

@@ -20,6 +20,8 @@ from powerlens.sensors.types import PowerSample
 
 # np.trapz was renamed to np.trapezoid in NumPy 2.0
 _trapz = getattr(np, "trapezoid", None) or np.trapz
+
+
 @dataclass
 class InferenceEnergy:
     """Energy measurement for a single inference."""
@@ -51,19 +53,81 @@ class EnergyReport:
     total_duration_s: float = 0.0
     actual_sample_rate_hz: float = 0.0
     rail_breakdown: Dict[str, float] = field(default_factory=dict)
+    iterations_per_run: int = 1
+
+    @property
+    def energy_per_inference_j(self) -> float:
+        """Mean energy per single inference (corrected for batching)."""
+        return self.mean_energy_j / self.iterations_per_run
+
+    @property
+    def energy_per_inference_std_j(self) -> float:
+        """Std dev of energy per single inference."""
+        return self.std_energy_j / self.iterations_per_run
+
+    @property
+    def energy_per_inference_min_j(self) -> float:
+        """Min energy per single inference."""
+        return self.min_energy_j / self.iterations_per_run
+
+    @property
+    def energy_per_inference_max_j(self) -> float:
+        """Max energy per single inference."""
+        return self.max_energy_j / self.iterations_per_run
+
+    @property
+    def latency_per_inference_s(self) -> float:
+        """Mean latency per single inference."""
+        if self.num_inferences == 0:
+            return 0.0
+        return (
+            self.total_duration_s
+            / self.num_inferences
+            / self.iterations_per_run
+        )
+
+    @property
+    def total_inferences(self) -> int:
+        """Total number of individual inferences across all runs."""
+        return self.num_inferences * self.iterations_per_run
+
+    @property
+    def inferences_per_joule(self) -> float:
+        """Energy efficiency: inferences per joule."""
+        if self.total_energy_j <= 0:
+            return 0.0
+        return self.total_inferences / self.total_energy_j
 
     def summary(self) -> str:
         """Return a human-readable summary string."""
+        ipr = self.iterations_per_run
+        epi = self.energy_per_inference_j
+        epi_std = self.energy_per_inference_std_j
+
         lines = [
             "",
             "PowerLens Inference Energy Report",
             "=" * 42,
-            f"Inferences:         {self.num_inferences}",
+            f"Profiling runs:     {self.num_inferences}",
+            f"Iterations per run: {ipr}",
+            f"Total inferences:   {self.total_inferences}",
             f"Sample rate:        {self.actual_sample_rate_hz:.1f} Hz",
             "",
-            f"Energy/inference:   {self.mean_energy_j:.4f} +/- {self.std_energy_j:.4f} J",
-            f"  Min:              {self.min_energy_j:.4f} J",
-            f"  Max:              {self.max_energy_j:.4f} J",
+        ]
+
+        if ipr > 1:
+            lines.extend([
+                f"Per-run energy:     {self.mean_energy_j:.4f} "
+                f"+/- {self.std_energy_j:.4f} J",
+                "",
+            ])
+
+        lines.extend([
+            f"Energy/inference:   {epi:.4f} +/- {epi_std:.4f} J",
+            f"  Min:              {self.energy_per_inference_min_j:.4f} J",
+            f"  Max:              {self.energy_per_inference_max_j:.4f} J",
+            "",
+            f"Latency/inference:  {self.latency_per_inference_s * 1000:.1f} ms",
             "",
             f"Power (avg):        {self.mean_power_w:.2f} W",
             f"Power (peak):       {self.peak_power_w:.2f} W",
@@ -72,25 +136,35 @@ class EnergyReport:
             f"Total energy:       {self.total_energy_j:.4f} J",
             f"Total duration:     {self.total_duration_s:.2f} s",
             "",
-            f"Efficiency:         {self.num_inferences / self.total_energy_j:.1f} inferences/J"
-            if self.total_energy_j > 0 else "Efficiency:         N/A",
+            f"Efficiency:         {self.inferences_per_joule:.1f} "
+            f"inferences/J"
+            if self.total_energy_j > 0
+            else "Efficiency:         N/A",
             "",
-        ]
+        ])
 
         if self.rail_breakdown:
             lines.append("Rail breakdown (avg power):")
             total_rail = sum(self.rail_breakdown.values())
             for rail_name, power_w in sorted(
-                self.rail_breakdown.items(), key=lambda x: x[1], reverse=True
+                self.rail_breakdown.items(),
+                key=lambda x: x[1],
+                reverse=True,
             ):
-                pct = (power_w / total_rail * 100) if total_rail > 0 else 0
-                lines.append(f"  {rail_name:20s} {power_w:.2f} W ({pct:.0f}%)")
+                pct = (
+                    (power_w / total_rail * 100) if total_rail > 0 else 0
+                )
+                lines.append(
+                    f"  {rail_name:20s} {power_w:.2f} W ({pct:.0f}%)"
+                )
             lines.append("")
 
         return "\n".join(lines)
 
 
-def _flatten_samples(sample_cycles: List[List[PowerSample]]) -> Dict[str, List]:
+def _flatten_samples(
+    sample_cycles: List[List[PowerSample]],
+) -> Dict[str, object]:
     """Convert list of sample cycles into per-rail arrays.
 
     Args:
@@ -104,7 +178,11 @@ def _flatten_samples(sample_cycles: List[List[PowerSample]]) -> Dict[str, List]:
             "rails": dict of rail_name -> {"power": array, "voltage": array}
     """
     if not sample_cycles:
-        return {"timestamps": np.array([]), "total_power": np.array([]), "rails": {}}
+        return {
+            "timestamps": np.array([]),
+            "total_power": np.array([]),
+            "rails": {},
+        }
 
     timestamps = []
     total_power = []
@@ -113,16 +191,26 @@ def _flatten_samples(sample_cycles: List[List[PowerSample]]) -> Dict[str, List]:
     for cycle in sample_cycles:
         # Use timestamp from first channel in cycle
         timestamps.append(cycle[0].timestamp)
-        cycle_total = 0.0
 
         for sample in cycle:
             if sample.rail_name not in rails:
                 rails[sample.rail_name] = {"power": [], "voltage": []}
             rails[sample.rail_name]["power"].append(sample.power_w)
             rails[sample.rail_name]["voltage"].append(sample.voltage_v)
-            cycle_total += sample.power_w
 
-        total_power.append(cycle_total)
+        # Total power = VDD_IN (board input power)
+        # NOT the sum of all rails — sub-rails are subsets of VDD_IN
+        vdd_in_power = next(
+            (s.power_w for s in cycle if s.rail_name == "VDD_IN"),
+            None,
+        )
+
+        if vdd_in_power is not None:
+            total_power.append(vdd_in_power)
+        else:
+            # Fallback: if no VDD_IN rail, sum all rails
+            # (for mock sensor or non-Jetson platforms)
+            total_power.append(sum(s.power_w for s in cycle))
 
     result_rails = {}
     for name, data in rails.items():
@@ -146,7 +234,8 @@ def _compute_inference_energy(
     inf_end: float,
     index: int,
 ) -> Optional[InferenceEnergy]:
-    """Compute energy for a single inference by integrating power over time.
+    """Compute energy for a single inference by integrating power
+    over time.
 
     Uses the trapezoidal rule for numerical integration.
     Only uses power samples that fall within the inference time window.
@@ -182,7 +271,9 @@ def _compute_inference_energy(
     for rail_name, rail_data in rails.items():
         rail_power = rail_data["power"][mask]
         if len(rail_power) >= 2:
-            rail_energy[rail_name] = float(_trapz(rail_power, window_times))
+            rail_energy[rail_name] = float(
+                _trapz(rail_power, window_times)
+            )
 
     return InferenceEnergy(
         index=index,
@@ -200,16 +291,23 @@ def compute_energy_report(
     samples: List[List[PowerSample]],
     inference_timestamps: List[tuple],
     idle_samples: Optional[List[List[PowerSample]]] = None,
+    iterations_per_run: int = 1,
 ) -> EnergyReport:
-    """Compute a complete energy report from samples and inference timestamps.
+    """Compute a complete energy report from samples and inference
+    timestamps.
 
     Args:
         samples: Power samples collected during inference.
-                 Each element is a list of PowerSample from one read cycle.
+                 Each element is a list of PowerSample from one
+                 read cycle.
         inference_timestamps: List of (start_time, end_time) tuples,
-                              one per inference, using time.monotonic().
+                              one per inference run,
+                              using time.monotonic().
         idle_samples: Optional power samples collected during idle.
                       Used to compute idle baseline power.
+        iterations_per_run: Number of model executions per
+                           measurement window. Used to compute
+                           per-inference energy from per-run energy.
 
     Returns:
         EnergyReport with per-inference and aggregate statistics.
@@ -237,7 +335,11 @@ def compute_energy_report(
 
     # Aggregate statistics
     if not inferences:
-        return EnergyReport(inferences=[], idle_power_w=idle_power)
+        return EnergyReport(
+            inferences=[],
+            idle_power_w=idle_power,
+            iterations_per_run=iterations_per_run,
+        )
 
     energies = np.array([inf.energy_j for inf in inferences])
     powers = np.array([inf.avg_power_w for inf in inferences])
@@ -253,7 +355,9 @@ def compute_energy_report(
     # Per-rail average power breakdown
     rail_breakdown = {}
     for rail_name, rail_data in rails.items():
-        rail_breakdown[rail_name] = float(np.mean(rail_data["power"]))
+        rail_breakdown[rail_name] = float(
+            np.mean(rail_data["power"])
+        )
 
     return EnergyReport(
         inferences=inferences,
@@ -266,7 +370,10 @@ def compute_energy_report(
         peak_power_w=float(np.max(peak_powers)),
         idle_power_w=idle_power,
         total_energy_j=float(np.sum(energies)),
-        total_duration_s=float(np.sum([inf.duration_s for inf in inferences])),
+        total_duration_s=float(
+            np.sum([inf.duration_s for inf in inferences])
+        ),
         actual_sample_rate_hz=actual_rate,
         rail_breakdown=rail_breakdown,
+        iterations_per_run=iterations_per_run,
     )

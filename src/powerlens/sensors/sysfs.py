@@ -193,9 +193,19 @@ class SysfsSensor:
         return samples
 
     def read_total_power(self) -> float:
-        """Total power across all readable channels."""
-        return sum(s.power_w for s in self.read_all())
-
+        """Total board input power (VDD_IN).
+        
+        Returns VDD_IN if available, otherwise falls back
+        to sum of all rails (for non-Jetson platforms).
+        """
+        samples = self.read_all()
+        # VDD_IN is the board input power — sub-rails are subsets
+        for s in samples:
+            if s.rail_name == "VDD_IN":
+                return s.power_w
+        # Fallback for platforms without VDD_IN
+        return sum(s.power_w for s in samples)
+    
     @property
     def detected_rails(self) -> Dict[int, str]:
         """Return detected channel-to-rail-name mapping."""

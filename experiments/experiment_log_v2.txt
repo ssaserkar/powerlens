@@ -1,0 +1,121 @@
+[12:10:26] ============================================================
+[12:10:26] PowerLens Paper Experiment Suite
+[12:10:26] Timestamp: 20260324_121026
+[12:10:26] ============================================================
+[12:10:26] Models found: ['mobilenetv2', 'resnet18', 'resnet34', 'resnet50', 'efficientnet_b0']
+[12:10:26] Power modes: ['15W', '25W', 'MAXN_SUPER']
+[12:10:26] Repetitions per combo: 5
+[12:10:26] Total profiles: 75
+[12:10:26] Estimated time: ~60-90 minutes
+[12:10:26] 
+Ambient temps: gpu=37.812°C, cpu=37.0°C
+[12:10:26] 
+############################################################
+[12:10:26] # EXPERIMENT 1: Model × Power Mode Matrix
+[12:10:26] # 5 models × 3 modes × 5 reps = 75 profiles
+[12:10:26] ############################################################
+[12:10:26] 
+============================================================
+[12:10:26] POWER MODE: 15W
+[12:10:26] ============================================================
+[12:10:26] Switching to 15W (mode 0)
+[12:10:26]   Current: NV Power Mode: 15W
+0
+[12:10:26]   Waiting 30s for stabilization...
+[12:10:56] 
+  Model: mobilenetv2 @ 15W
+[12:10:56]     Repetition 1/5
+[12:12:36]       → 10.5 mJ/inf, 1.8 ms, 7.0 W
+[12:12:41]     Repetition 2/5
+[12:14:20]       → 10.4 mJ/inf, 1.7 ms, 7.0 W
+[12:14:25]     Repetition 3/5
+[12:16:05]       → 10.4 mJ/inf, 1.7 ms, 7.0 W
+[12:16:10]     Repetition 4/5
+[12:17:49]       → 10.5 mJ/inf, 1.7 ms, 7.1 W
+[12:17:54]     Repetition 5/5
+[12:19:36]       → 10.6 mJ/inf, 1.8 ms, 7.1 W
+[12:19:41]   Cooling down 15s between models...
+[12:19:56] 
+  Model: resnet18 @ 15W
+[12:19:56]     Repetition 1/5
+[12:20:40]       → 9.9 mJ/inf, 1.5 ms, 8.3 W
+[12:20:45]     Repetition 2/5
+[12:21:29]       → 10.0 mJ/inf, 1.5 ms, 8.3 W
+[12:21:34]     Repetition 3/5
+[12:22:18]       → 10.9 mJ/inf, 1.6 ms, 8.0 W
+[12:22:23]     Repetition 4/5
+[12:23:08]       → 10.8 mJ/inf, 1.6 ms, 8.0 W
+[12:23:13]     Repetition 5/5
+[12:23:56]       → 10.5 mJ/inf, 1.6 ms, 8.0 W
+[12:24:01]   Cooling down 15s between models...
+[12:24:16] 
+  Model: resnet34 @ 15W
+[12:24:16]     Repetition 1/5
+[12:25:01]       → 16.3 mJ/inf, 2.3 ms, 8.6 W
+[12:25:06]     Repetition 2/5
+[12:25:50]       → 16.3 mJ/inf, 2.3 ms, 8.6 W
+[12:25:55]     Repetition 3/5
+[12:26:38]       → 16.2 mJ/inf, 2.3 ms, 8.6 W
+[12:26:43]     Repetition 4/5
+[12:27:28]       → 16.1 mJ/inf, 2.3 ms, 8.6 W
+[12:27:33]     Repetition 5/5
+[12:28:18]       → 16.4 mJ/inf, 2.3 ms, 8.7 W
+[12:28:23]   Cooling down 15s between models...
+[12:28:38] 
+  Model: resnet50 @ 15W
+[12:28:38]     Repetition 1/5
+[12:30:24]       → 22.7 mJ/inf, 3.2 ms, 8.6 W
+[12:30:29]     Repetition 2/5
+[12:32:14]       → 22.6 mJ/inf, 3.2 ms, 8.6 W
+[12:32:19]     Repetition 3/5
+[12:34:06]       → 22.6 mJ/inf, 3.2 ms, 8.6 W
+[12:34:11]     Repetition 4/5
+[12:35:56]       → 22.5 mJ/inf, 3.3 ms, 8.6 W
+[12:36:01]     Repetition 5/5
+[12:37:46]       → 22.4 mJ/inf, 3.2 ms, 8.6 W
+[12:37:51]   Cooling down 15s between models...
+[12:38:06] 
+  Model: efficientnet_b0 @ 15W
+[12:38:06]     Repetition 1/5
+[12:42:14]       → 19.3 mJ/inf, 3.4 ms, 7.1 W
+[12:42:19]     Repetition 2/5
+[12:46:25]       → 19.4 mJ/inf, 3.4 ms, 7.0 W
+[12:46:30]     Repetition 3/5
+[12:50:38]       → 19.5 mJ/inf, 3.4 ms, 7.1 W
+[12:50:43]     Repetition 4/5
+[12:54:50]       → 19.3 mJ/inf, 3.4 ms, 7.0 W
+[12:54:55]     Repetition 5/5
+[12:59:01]       → 19.3 mJ/inf, 3.4 ms, 7.0 W
+[12:59:06]   Cooling down 15s between models...
+[12:59:21] 
+============================================================
+[12:59:21] POWER MODE: 25W
+[12:59:21] ============================================================
+[12:59:21] Switching to 25W (mode 1)
+[12:59:21]   Current: NV Power Mode: 25W
+1
+[12:59:21]   Waiting 30s for stabilization...
+[12:59:51] 
+  Model: mobilenetv2 @ 25W
+[12:59:51]     Repetition 1/5
+[13:01:31]       → 10.4 mJ/inf, 1.7 ms, 7.1 W
+[13:01:36]     Repetition 2/5
+[13:03:17]       → 10.4 mJ/inf, 1.7 ms, 7.0 W
+[13:03:22]     Repetition 3/5
+[13:05:02]       → 10.3 mJ/inf, 1.7 ms, 7.0 W
+[13:05:07]     Repetition 4/5
+[13:06:47]       → 10.3 mJ/inf, 1.7 ms, 7.0 W
+[13:06:52]     Repetition 5/5
+[13:08:30]       → 10.3 mJ/inf, 1.7 ms, 7.0 W
+[13:08:35]   Cooling down 15s between models...
+[13:08:50] 
+  Model: resnet18 @ 25W
+[13:08:50]     Repetition 1/5
+[13:09:36]       → 10.7 mJ/inf, 1.6 ms, 8.0 W
+[13:09:41]     Repetition 2/5
+[13:10:27]       → 10.7 mJ/inf, 1.6 ms, 8.0 W
+[13:10:32]     Repetition 3/5
+[13:11:17]       → 10.6 mJ/inf, 1.6 ms, 8.0 W
+[13:11:22]     Repetition 4/5
+[13:12:06]       → 9.4 mJ/inf, 1.4 ms, 8.3 W
+[13:12:11]     Repetition 5/5

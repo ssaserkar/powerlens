@@ -43,6 +43,18 @@ class PowerLensContext:
                 ctx.mark_inference_end()
         report = ctx.report()
         print(report.summary())
+
+    For batched inference (multiple model executions per
+    measurement window):
+
+        ctx = PowerLensContext(sample_rate_hz=100)
+        with ctx:
+            ctx.mark_inference_start()
+            for _ in range(100):
+                model.infer(image)
+            ctx.mark_inference_end()
+        report = ctx.report(iterations_per_run=100)
+        print(report.summary())
     """
 
     def __init__(self, sensor=None, sample_rate_hz: float = 100.0):
@@ -76,7 +88,10 @@ class PowerLensContext:
         time.sleep(1.0)
         idle_sampler.stop()
         self._idle_samples = idle_sampler.get_samples()
-        logger.info("Idle baseline: %d samples collected", len(self._idle_samples))
+        logger.info(
+            "Idle baseline: %d samples collected",
+            len(self._idle_samples),
+        )
 
         # Start inference sampling
         self._sampler = PowerSampler(self._sensor, self._sample_rate_hz)
@@ -99,7 +114,8 @@ class PowerLensContext:
         """Call immediately after each inference."""
         if self._current_start is None:
             raise RuntimeError(
-                "mark_inference_end() called without mark_inference_start()"
+                "mark_inference_end() called without "
+                "mark_inference_start()"
             )
         end = time.monotonic()
         self._inference_timestamps.append((self._current_start, end))
@@ -110,19 +126,31 @@ class PowerLensContext:
         """Number of inferences recorded so far."""
         return len(self._inference_timestamps)
 
-    def report(self) -> EnergyReport:
+    def report(self, iterations_per_run: int = 1) -> EnergyReport:
         """Compute and return the energy report.
 
         Call this after exiting the context manager.
+
+        Args:
+            iterations_per_run: If each measurement window contains
+                multiple model executions (batched profiling),
+                set this to the number of executions per window.
+                Energy and latency will be divided accordingly.
+
+        Returns:
+            EnergyReport with per-inference statistics.
         """
         if self._sampler is None:
-            raise RuntimeError("No profiling data. Use within a 'with' block.")
+            raise RuntimeError(
+                "No profiling data. Use within a 'with' block."
+            )
 
         samples = self._sampler.get_samples()
         return compute_energy_report(
             samples=samples,
             inference_timestamps=self._inference_timestamps,
             idle_samples=self._idle_samples,
+            iterations_per_run=iterations_per_run,
         )
 
 
@@ -143,8 +171,8 @@ def profile(
         sample_rate_hz: Power sampling rate in Hz.
         sensor: Sensor object. If None, auto-detects or uses mock.
         real_workload: If True, run actual CPU computation instead
-                       of time.sleep(). Creates measurable power change
-                       on real hardware.
+                       of time.sleep(). Creates measurable power
+                       change on real hardware.
 
     Returns:
         EnergyReport with per-inference energy statistics.
@@ -214,3 +242,4 @@ def _cpu_stress(duration_s: float):
         a = np.random.randn(200, 200).astype(np.float32)
         b = np.random.randn(200, 200).astype(np.float32)
         np.dot(a, b)
+        

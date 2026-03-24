@@ -29,8 +29,49 @@ def _get_cuda_lib():
         )
 
 
+def _has_dynamic_shapes(network):
+    """Check if any input tensor has dynamic dimensions (-1)."""
+    for i in range(network.num_inputs):
+        shape = network.get_input(i).shape
+        if -1 in shape:
+            return True
+    return False
+
+
+def _add_optimization_profile(builder, network, config):
+    """Add optimization profile for networks with dynamic shapes.
+    
+    Sets min/opt/max to the same static shape (batch=1),
+    effectively pinning dynamic dimensions.
+    """
+    import tensorrt as trt
+
+    profile = builder.create_optimization_profile()
+    for i in range(network.num_inputs):
+        inp = network.get_input(i)
+        name = inp.name
+        shape = list(inp.shape)
+        # Replace -1 (dynamic) with 1
+        static_shape = [1 if s == -1 else s for s in shape]
+        logger.info(
+            "Dynamic input '%s': %s → static %s",
+            name, shape, static_shape
+        )
+        profile.set_shape(
+            name,
+            min=static_shape,
+            opt=static_shape,
+            max=static_shape,
+        )
+    config.add_optimization_profile(profile)
+
+
 def build_engine_from_onnx(onnx_path: str):
-    """Build a TensorRT engine from an ONNX model."""
+    """Build a TensorRT engine from an ONNX model.
+    
+    Handles both static and dynamic shape ONNX models.
+    Dynamic shapes are pinned to batch=1 via optimization profile.
+    """
     import tensorrt as trt
 
     trt_logger = trt.Logger(trt.Logger.WARNING)
@@ -43,11 +84,19 @@ def build_engine_from_onnx(onnx_path: str):
     logger.info("Loading ONNX model: %s", onnx_path)
     with open(onnx_path, "rb") as f:
         if not parser.parse(f.read()):
-            errors = [str(parser.get_error(i)) for i in range(parser.num_errors)]
+            errors = [
+                str(parser.get_error(i))
+                for i in range(parser.num_errors)
+            ]
             raise RuntimeError(f"Failed to parse ONNX: {errors}")
 
     config = builder.create_builder_config()
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 28)
+
+    # Handle dynamic shapes
+    if _has_dynamic_shapes(network):
+        logger.info("ONNX model has dynamic shapes — adding optimization profile")
+        _add_optimization_profile(builder, network, config)
 
     if builder.platform_has_fast_fp16:
         config.set_flag(trt.BuilderFlag.FP16)
@@ -95,6 +144,79 @@ def get_engine_info(engine) -> dict:
     return info
 
 
+def _setup_cuda():
+    """Load CUDA library and set up function signatures."""
+    cuda_lib = _get_cuda_lib()
+
+    cuda_malloc = cuda_lib.cudaMalloc
+    cuda_malloc.restype = ctypes.c_int
+    cuda_malloc.argtypes = [
+        ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t
+    ]
+
+    cuda_memcpy = cuda_lib.cudaMemcpy
+    cuda_memcpy.restype = ctypes.c_int
+    cuda_memcpy.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_size_t, ctypes.c_int
+    ]
+
+    cuda_free = cuda_lib.cudaFree
+    cuda_free.restype = ctypes.c_int
+    cuda_free.argtypes = [ctypes.c_void_p]
+
+    cuda_sync = cuda_lib.cudaDeviceSynchronize
+    cuda_sync.restype = ctypes.c_int
+
+    return cuda_malloc, cuda_memcpy, cuda_free, cuda_sync
+
+
+def _allocate_buffers(engine, context, cuda_malloc, cuda_memcpy):
+    """Allocate GPU buffers for all engine tensors.
+    
+    Handles both static and dynamic shape engines by reading
+    shapes from the execution context (which reflects optimization
+    profile settings).
+    """
+    import tensorrt as trt
+
+    device_ptrs = {}
+    buffer_list = []
+
+    for i in range(engine.num_io_tensors):
+        name = engine.get_tensor_name(i)
+        # Use context shape — this respects optimization profiles
+        shape = list(context.get_tensor_shape(name))
+
+        # If shape still has -1, set input shape explicitly
+        if -1 in shape:
+            static_shape = [1 if s == -1 else s for s in shape]
+            if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
+                context.set_input_shape(name, tuple(static_shape))
+            shape = static_shape
+
+        dtype = trt.nptype(engine.get_tensor_dtype(name))
+        host_data = np.random.randn(*shape).astype(dtype)
+        nbytes = host_data.nbytes
+
+        ptr = ctypes.c_void_p()
+        ret = cuda_malloc(ctypes.byref(ptr), nbytes)
+        if ret != 0:
+            raise RuntimeError(
+                f"cudaMalloc failed for tensor '{name}' "
+                f"(shape={shape}, bytes={nbytes}), error={ret}"
+            )
+
+        if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
+            cuda_memcpy(ptr, host_data.ctypes.data, nbytes, MEMCPY_H2D)
+
+        context.set_tensor_address(name, ptr.value)
+        device_ptrs[name] = ptr.value
+        buffer_list.append(ptr.value)
+
+    return device_ptrs, buffer_list
+
+
 def run_trt_inference(engine, num_runs: int, warmup: int = 5,
                       iterations_per_run: int = 1):
     """Run TensorRT inference and return timestamps.
@@ -109,49 +231,13 @@ def run_trt_inference(engine, num_runs: int, warmup: int = 5,
     Returns:
         List of (start_time, end_time) tuples.
     """
-    import tensorrt as trt
-
-    cuda_lib = _get_cuda_lib()
-
-    cuda_malloc = cuda_lib.cudaMalloc
-    cuda_malloc.restype = ctypes.c_int
-    cuda_malloc.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
-
-    cuda_memcpy = cuda_lib.cudaMemcpy
-    cuda_memcpy.restype = ctypes.c_int
-    cuda_memcpy.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
-                            ctypes.c_size_t, ctypes.c_int]
-
-    cuda_free = cuda_lib.cudaFree
-    cuda_free.restype = ctypes.c_int
-    cuda_free.argtypes = [ctypes.c_void_p]
-
-    cuda_sync = cuda_lib.cudaDeviceSynchronize
-    cuda_sync.restype = ctypes.c_int
+    cuda_malloc, cuda_memcpy, cuda_free, cuda_sync = _setup_cuda()
 
     context = engine.create_execution_context()
 
-    # Allocate buffers
-    device_ptrs = {}
-    buffer_list = []
-
-    for i in range(engine.num_io_tensors):
-        name = engine.get_tensor_name(i)
-        shape = engine.get_tensor_shape(name)
-        dtype = trt.nptype(engine.get_tensor_dtype(name))
-        host_data = np.random.randn(*shape).astype(dtype)
-        nbytes = host_data.nbytes
-
-        ptr = ctypes.c_void_p()
-        cuda_malloc(ctypes.byref(ptr), nbytes)
-
-        if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
-            cuda_memcpy(ptr, host_data.ctypes.data, nbytes, MEMCPY_H2D)
-
-        context.set_tensor_address(name, ptr.value)
-        device_ptrs[name] = ptr.value
-        buffer_list.append(ptr.value)
-
+    device_ptrs, buffer_list = _allocate_buffers(
+        engine, context, cuda_malloc, cuda_memcpy
+    )
     cuda_sync()
 
     # Warmup
@@ -162,8 +248,10 @@ def run_trt_inference(engine, num_runs: int, warmup: int = 5,
     cuda_sync()
 
     # Timed runs
-    logger.info("Running %d profiling runs (%d iterations each)...",
-                num_runs, iterations_per_run)
+    logger.info(
+        "Running %d profiling runs (%d iterations each)...",
+        num_runs, iterations_per_run
+    )
     timestamps = []
     for i in range(num_runs):
         cuda_sync()
@@ -181,6 +269,7 @@ def run_trt_inference(engine, num_runs: int, warmup: int = 5,
     del context
 
     return timestamps
+
 
 def build_engine_for_batch_size(onnx_path: str, batch_size: int):
     """Build a TensorRT engine for a specific batch size.
@@ -207,7 +296,10 @@ def build_engine_for_batch_size(onnx_path: str, batch_size: int):
     logger.info("Loading ONNX model: %s (batch=%d)", onnx_path, batch_size)
     with open(onnx_path, "rb") as f:
         if not parser.parse(f.read()):
-            errors = [str(parser.get_error(i)) for i in range(parser.num_errors)]
+            errors = [
+                str(parser.get_error(i))
+                for i in range(parser.num_errors)
+            ]
             raise RuntimeError(f"Failed to parse ONNX: {errors}")
 
     # Override batch dimension for all inputs
@@ -226,7 +318,9 @@ def build_engine_for_batch_size(onnx_path: str, batch_size: int):
     logger.info("Building TensorRT engine (batch=%d)...", batch_size)
     engine_bytes = builder.build_serialized_network(network, config)
     if engine_bytes is None:
-        raise RuntimeError(f"Failed to build TensorRT engine for batch={batch_size}")
+        raise RuntimeError(
+            f"Failed to build TensorRT engine for batch={batch_size}"
+        )
 
     runtime = trt.Runtime(trt_logger)
     engine = runtime.deserialize_cuda_engine(engine_bytes)
@@ -238,7 +332,7 @@ def run_trt_inference_batch(engine, batch_size: int, num_runs: int,
     """Run TensorRT inference at a specific batch size.
 
     Args:
-        engine: TensorRT engine (must support dynamic batch).
+        engine: TensorRT engine (must match batch_size).
         batch_size: Batch size to use.
         num_runs: Number of profiling runs.
         warmup: Warmup runs.
@@ -247,57 +341,13 @@ def run_trt_inference_batch(engine, batch_size: int, num_runs: int,
     Returns:
         List of (start_time, end_time) tuples.
     """
-    import tensorrt as trt
-
-    cuda_lib = _get_cuda_lib()
-
-    cuda_malloc = cuda_lib.cudaMalloc
-    cuda_malloc.restype = ctypes.c_int
-    cuda_malloc.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
-
-    cuda_memcpy = cuda_lib.cudaMemcpy
-    cuda_memcpy.restype = ctypes.c_int
-    cuda_memcpy.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
-                            ctypes.c_size_t, ctypes.c_int]
-
-    cuda_free = cuda_lib.cudaFree
-    cuda_free.restype = ctypes.c_int
-    cuda_free.argtypes = [ctypes.c_void_p]
-
-    cuda_sync = cuda_lib.cudaDeviceSynchronize
-    cuda_sync.restype = ctypes.c_int
+    cuda_malloc, cuda_memcpy, cuda_free, cuda_sync = _setup_cuda()
 
     context = engine.create_execution_context()
 
-    # Set batch size for all tensors
-    device_ptrs = {}
-    buffer_list = []
-
-    for i in range(engine.num_io_tensors):
-        name = engine.get_tensor_name(i)
-        shape = list(engine.get_tensor_shape(name))
-
-        # Replace -1 (dynamic) dimension with actual batch size
-        shape[0] = batch_size
-        context.set_input_shape(name, tuple(shape)) if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT else None
-
-    for i in range(engine.num_io_tensors):
-        name = engine.get_tensor_name(i)
-        shape = list(context.get_tensor_shape(name))
-        dtype = trt.nptype(engine.get_tensor_dtype(name))
-        host_data = np.random.randn(*shape).astype(dtype)
-        nbytes = host_data.nbytes
-
-        ptr = ctypes.c_void_p()
-        cuda_malloc(ctypes.byref(ptr), nbytes)
-
-        if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
-            cuda_memcpy(ptr, host_data.ctypes.data, nbytes, MEMCPY_H2D)
-
-        context.set_tensor_address(name, ptr.value)
-        device_ptrs[name] = ptr.value
-        buffer_list.append(ptr.value)
-
+    device_ptrs, buffer_list = _allocate_buffers(
+        engine, context, cuda_malloc, cuda_memcpy
+    )
     cuda_sync()
 
     # Warmup

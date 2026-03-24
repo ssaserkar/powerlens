@@ -174,5 +174,13 @@ class INA3221:
         return [self.read_channel(ch) for ch in sorted(self.channels.keys())]
 
     def read_total_power(self) -> float:
-        """Total power across all channels in watts."""
-        return sum(s.power_w for s in self.read_all())
+        """Total board input power (VDD_IN).
+        
+        Returns VDD_IN if available, otherwise falls back
+        to sum of all channels.
+        """
+        samples = self.read_all()
+        for s in samples:
+            if s.rail_name == "VDD_IN":
+                return s.power_w
+        return sum(s.power_w for s in samples)

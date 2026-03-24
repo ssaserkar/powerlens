@@ -1,0 +1,99 @@
+[14:54:30] ============================================================
+[14:54:30] PowerLens Paper Experiment Suite
+[14:54:30] Timestamp: 20260323_145430
+[14:54:30] ============================================================
+[14:54:30] Models found: ['mobilenetv2', 'resnet18', 'resnet34', 'resnet50', 'efficientnet_b0']
+[14:54:30] Power modes: ['15W', '25W', 'MAXN_SUPER']
+[14:54:30] Repetitions per combo: 5
+[14:54:30] Total profiles: 75
+[14:54:30] Estimated time: ~60-90 minutes
+[14:54:30] 
+Ambient temps: gpu=38.093°C, cpu=37.281°C
+[14:54:30] 
+Skipping experiment 1 (--skip-matrix flag)
+[14:54:30] Loaded 75 results from experiments/results/interim_20260323_120033.json
+[14:54:30] 
+Interim results saved: experiments/results/interim_20260323_145430.json
+[14:54:30] 
+############################################################
+[14:54:30] # EXPERIMENT 2: Tegrastats Validation
+[14:54:30] ############################################################
+[14:54:30] 
+============================================================
+[14:54:30] VALIDATION: tegrastats comparison
+[14:54:30] ============================================================
+[14:54:30] Switching to MAXN_SUPER (mode 2)
+[14:54:30]   Current: NV Power Mode: MAXN_SUPER
+2
+[14:54:30]   Waiting 30s for stabilization...
+[14:55:01] Starting tegrastats...
+[14:55:04] Running PowerLens profile (ResNet-18, 100 runs)...
+[14:55:54] Stopping tegrastats...
+[14:55:54]   PowerLens profile completed successfully
+[14:55:54]   tegrastats samples: 465
+[14:55:54]   tegrastats VDD_IN: 6.15 W
+[14:55:54]   PowerLens  VDD_IN: 8.39 W
+[14:55:54]   Error: 36.3%
+[14:55:54] 
+############################################################
+[14:55:54] # EXPERIMENT 3: Thermal Stress Test
+[14:55:54] ############################################################
+[14:55:54] 
+============================================================
+[14:55:54] THERMAL: Sustained inference stress test
+[14:55:54] ============================================================
+[14:55:54] Switching to MAXN_SUPER (mode 2)
+[14:55:54]   Current: NV Power Mode: MAXN_SUPER
+2
+[14:55:54]   Waiting 30s for stabilization...
+[14:56:24]   Waiting 30s for thermal baseline...
+[14:56:54]   Initial GPU temp: 38.343°C
+[14:56:54]   Initial CPU temp: 37.375°C
+[14:56:54]   Running sustained inference (5 chunks × 40 runs)...
+[14:58:40]     Chunk 1/5: GPU=39.8°C (t=106s)
+[15:00:20]     Chunk 2/5: GPU=40.1°C (t=206s)
+[15:02:00]     Chunk 3/5: GPU=40.4°C (t=306s)
+[15:03:42]     Chunk 4/5: GPU=40.7°C (t=407s)
+[15:05:22]     Chunk 5/5: GPU=40.5°C (t=508s)
+[15:05:22] 
+  Test duration: 508s
+[15:05:22]   Final GPU temp: 40.312°C
+[15:05:22]   Temp rise: 2.0°C
+[15:05:22]   Max GPU temp: 40.7°C (threshold: 85°C)
+[15:05:22]   Throttled: No
+[15:05:22] 
+============================================================
+[15:05:22] SUMMARY TABLES FOR PAPER
+[15:05:22] ============================================================
+[15:05:22] 
+--- Table: Per-Inference Energy (MAXN_SUPER) ---
+[15:05:22] Model                Energy(mJ)    ±(mJ)  Lat(ms) Power(W)   GPU%  GPUFreq
+[15:05:22] ---------------------------------------------------------------------------
+[15:05:22] mobilenetv2                16.4      0.1      0.0     11.1     53      473
+[15:05:22] resnet18                   16.7      0.9      0.0     12.9     51      483
+[15:05:22] resnet34                   23.5      0.4      0.0     15.7     48      675
+[15:05:22] resnet50                   32.1      0.5      0.0     16.2     46      724
+[15:05:22] efficientnet_b0            27.1      0.5      0.0     12.4     46      650
+[15:05:22] 
+--- Table: Efficiency Across Power Modes ---
+[15:05:22] Model                 15W inf/J  25W inf/J MAXN inf/J     Best
+[15:05:22] -----------------------------------------------------------------
+[15:05:22] mobilenetv2                61.6       63.2       60.8      25W
+[15:05:22] resnet18                   59.4       63.7       59.9      25W
+[15:05:22] resnet34                   38.9       43.2       42.5      25W
+[15:05:22] resnet50                   28.2       31.7       31.1      25W
+[15:05:22] efficientnet_b0            33.2       37.8       36.8      25W
+[15:05:22] 
+--- Table: Per-Rail Power Breakdown (MAXN_SUPER) ---
+[15:05:22] Model                 VDD_IN(W) CPU_GPU(W)     SOC(W)   SOC%
+[15:05:22] ------------------------------------------------------------
+[15:05:22] mobilenetv2                7.07       2.16       1.68   43.6
+[15:05:22] resnet18                   8.09       2.71       1.86   40.7
+[15:05:22] resnet34                   9.42       3.82       1.94   33.6
+[15:05:22] resnet50                   9.75       3.89       2.06   34.6
+[15:05:22] efficientnet_b0            7.60       2.71       1.71   38.6
+[15:05:22] 
+============================================================
+[15:05:22] ALL EXPERIMENTS COMPLETE
+[15:05:22] Results: experiments/results/paper_results_20260323_145430.json
+[15:05:22] ============================================================
