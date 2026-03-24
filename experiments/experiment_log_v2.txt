@@ -119,3 +119,10 @@ Ambient temps: gpu=37.812°C, cpu=37.0°C
 [13:11:22]     Repetition 4/5
 [13:12:06]       → 9.4 mJ/inf, 1.4 ms, 8.3 W
 [13:12:11]     Repetition 5/5
+[13:12:56]       → 9.7 mJ/inf, 1.4 ms, 8.6 W
+[13:13:01]   Cooling down 15s between models...
+[13:13:16] 
+  Model: resnet34 @ 25W
+[13:13:16]     Repetition 1/5
+[13:14:01]       → 14.4 mJ/inf, 2.0 ms, 9.5 W
+[13:14:06]     Repetition 2/5

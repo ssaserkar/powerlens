@@ -194,7 +194,7 @@ class SysfsSensor:
 
     def read_total_power(self) -> float:
         """Total board input power (VDD_IN).
-        
+
         Returns VDD_IN if available, otherwise falls back
         to sum of all rails (for non-Jetson platforms).
         """
@@ -205,7 +205,7 @@ class SysfsSensor:
                 return s.power_w
         # Fallback for platforms without VDD_IN
         return sum(s.power_w for s in samples)
-    
+
     @property
     def detected_rails(self) -> Dict[int, str]:
         """Return detected channel-to-rail-name mapping."""

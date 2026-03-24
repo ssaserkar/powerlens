@@ -242,4 +242,3 @@ def _cpu_stress(duration_s: float):
         a = np.random.randn(200, 200).astype(np.float32)
         b = np.random.randn(200, 200).astype(np.float32)
         np.dot(a, b)
-        

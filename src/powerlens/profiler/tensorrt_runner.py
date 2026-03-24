@@ -40,11 +40,10 @@ def _has_dynamic_shapes(network):
 
 def _add_optimization_profile(builder, network, config):
     """Add optimization profile for networks with dynamic shapes.
-    
+
     Sets min/opt/max to the same static shape (batch=1),
     effectively pinning dynamic dimensions.
     """
-    import tensorrt as trt
 
     profile = builder.create_optimization_profile()
     for i in range(network.num_inputs):
@@ -68,7 +67,7 @@ def _add_optimization_profile(builder, network, config):
 
 def build_engine_from_onnx(onnx_path: str):
     """Build a TensorRT engine from an ONNX model.
-    
+
     Handles both static and dynamic shape ONNX models.
     Dynamic shapes are pinned to batch=1 via optimization profile.
     """
@@ -173,7 +172,7 @@ def _setup_cuda():
 
 def _allocate_buffers(engine, context, cuda_malloc, cuda_memcpy):
     """Allocate GPU buffers for all engine tensors.
-    
+
     Handles both static and dynamic shape engines by reading
     shapes from the execution context (which reflects optimization
     profile settings).

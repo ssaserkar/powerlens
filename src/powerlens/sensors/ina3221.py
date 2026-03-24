@@ -175,7 +175,7 @@ class INA3221:
 
     def read_total_power(self) -> float:
         """Total board input power (VDD_IN).
-        
+
         Returns VDD_IN if available, otherwise falls back
         to sum of all channels.
         """
