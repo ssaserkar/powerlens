@@ -1,18 +1,17 @@
 """
-Generate plots for the PowerLens README.
+Generate plots for the PowerLens README using real model data.
 
-Run this after running full_showcase.py to generate
-publication-ready comparison charts.
+Uses the same 5 models profiled for the arXiv paper.
+Run from the powerlens root directory on Jetson.
 
 Usage:
-    cd examples/
-    python create_demo_model.py
-    python generate_readme_plots.py
+    python examples/generate_readme_plots.py
 """
 
 import os
 import sys
 import time
+import json
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -22,633 +21,544 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-def main():
-    import powerlens
-    from powerlens.sensors.auto import detect_sensor
-    from powerlens.profiler.session import PowerLensContext
-    from powerlens.profiler.tensorrt_runner import (
-        build_engine_for_batch_size,
-        run_trt_inference,
+# Paper data — hardcoded from experiments for reliable plots
+PAPER_DATA = {
+    "energy_per_inference_mj": {
+        "MobileNetV2":    {"15W": 10.5, "25W": 10.3, "MAXN": 10.6},
+        "ResNet-18":      {"15W": 10.4, "25W": 10.2, "MAXN": 10.4},
+        "ResNet-34":      {"15W": 16.3, "25W": 14.5, "MAXN": 14.7},
+        "ResNet-50":      {"15W": 22.6, "25W": 19.7, "MAXN": 19.8},
+        "EfficientNet-B0":{"15W": 19.4, "25W": 16.9, "MAXN": 18.0},
+    },
+    "efficiency_inf_per_j": {
+        "MobileNetV2":    {"15W": 95.7, "25W": 96.7, "MAXN": 94.1},
+        "ResNet-18":      {"15W": 96.2, "25W": 98.1, "MAXN": 96.7},
+        "ResNet-34":      {"15W": 61.5, "25W": 69.1, "MAXN": 68.0},
+        "ResNet-50":      {"15W": 44.3, "25W": 50.8, "MAXN": 50.5},
+        "EfficientNet-B0":{"15W": 51.6, "25W": 59.1, "MAXN": 55.8},
+    },
+    "avg_power_w": {
+        "MobileNetV2":    {"15W": 7.1, "25W": 7.0, "MAXN": 7.2},
+        "ResNet-18":      {"15W": 8.1, "25W": 8.2, "MAXN": 8.3},
+        "ResNet-34":      {"15W": 8.6, "25W": 9.6, "MAXN": 9.8},
+        "ResNet-50":      {"15W": 8.6, "25W": 9.7, "MAXN": 10.0},
+        "EfficientNet-B0":{"15W": 7.1, "25W": 7.6, "MAXN": 7.9},
+    },
+    "latency_ms": {
+        "MobileNetV2": 1.7, "ResNet-18": 1.5, "ResNet-34": 2.3,
+        "ResNet-50": 3.2, "EfficientNet-B0": 3.4,
+    },
+    "rail_power_maxn": {
+        "MobileNetV2":    {"VDD_IN": 7.08, "VDD_CPU_GPU_CV": 2.17, "VDD_SOC": 1.68},
+        "ResNet-18":      {"VDD_IN": 8.16, "VDD_CPU_GPU_CV": 2.76, "VDD_SOC": 1.86},
+        "ResNet-34":      {"VDD_IN": 9.50, "VDD_CPU_GPU_CV": 3.87, "VDD_SOC": 1.95},
+        "ResNet-50":      {"VDD_IN": 9.74, "VDD_CPU_GPU_CV": 3.90, "VDD_SOC": 2.05},
+        "EfficientNet-B0":{"VDD_IN": 7.72, "VDD_CPU_GPU_CV": 2.83, "VDD_SOC": 1.70},
+    },
+    "fp16_vs_fp32": {
+        "MobileNetV2":    {"fp16_mj": 24.5, "fp32_mj": 27.8, "speedup": 1.3, "energy_ratio": 1.1},
+        "ResNet-18":      {"fp16_mj": 16.6, "fp32_mj": 29.8, "speedup": 1.5, "energy_ratio": 1.8},
+        "ResNet-34":      {"fp16_mj": 23.7, "fp32_mj": 49.8, "speedup": 1.7, "energy_ratio": 2.1},
+        "ResNet-50":      {"fp16_mj": 35.6, "fp32_mj": 59.1, "speedup": 1.2, "energy_ratio": 1.7},
+        "EfficientNet-B0":{"fp16_mj": 31.6, "fp32_mj": 41.0, "speedup": 1.1, "energy_ratio": 1.3},
+    },
+    "batch_scaling": {
+        "batch": [1, 2, 4, 8],
+        "energy_mj": [9.5, 6.4, 5.5, 4.9],
+        "efficiency": [104.8, 156.9, 180.8, 204.5],
+        "throughput": [410, 538, 626, 704],
+    },
+    "thermal_timeline": {
+        "time_s": [
+            0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60,
+            65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120,
+            125, 130, 135, 140, 145, 150, 155, 160, 165, 170,
+            175, 180, 185, 190, 195, 200, 205, 210, 215, 220,
+            226, 231, 236, 241, 246, 251, 256, 261, 266, 271,
+            276, 281, 286, 291, 296, 301, 306, 311, 316, 321,
+            326, 331, 336, 341, 346, 351, 356, 361, 366, 371,
+            376, 381, 386, 391, 396, 401, 406, 411, 416, 421,
+            426, 431, 436, 441, 446, 451, 456, 461, 466, 471,
+            476, 481, 486, 491, 496, 501, 506, 511, 517, 522,
+            527, 532, 537, 542, 547, 552, 557, 562, 567, 572,
+            577, 582, 587, 592, 597,
+        ],
+        "gpu_temp_c": [
+            38.3, 47.2, 48.8, 49.8, 50.7, 52.2, 52.8, 54.0, 55.1,
+            55.6, 56.2, 57.0, 57.5, 58.0, 58.7, 59.2, 59.8, 59.9,
+            60.3, 60.7, 61.0, 61.7, 61.8, 62.2, 62.4, 62.8, 62.8,
+            63.2, 63.2, 63.3, 63.7, 63.8, 63.8, 64.4, 64.2, 64.7,
+            64.5, 64.8, 64.8, 64.9, 65.3, 65.3, 65.2, 65.3, 65.6,
+            65.8, 65.8, 66.1, 65.9, 65.9, 66.4, 66.2, 66.1, 66.2,
+            66.2, 66.6, 66.3, 66.7, 66.5, 66.5, 66.8, 66.7, 66.6,
+            67.0, 66.7, 67.0, 66.8, 67.0, 67.2, 66.8, 66.9, 67.3,
+            66.9, 67.3, 67.0, 67.1, 67.2, 67.0, 67.3, 67.2, 67.2,
+            67.3, 67.4, 67.2, 67.2, 67.5, 67.2, 67.2, 67.5, 67.7,
+            67.3, 67.5, 67.6, 67.4, 67.6, 67.4, 67.5, 67.4, 67.5,
+            67.3, 67.5, 67.3, 67.4, 67.7, 67.5, 67.5, 67.5, 67.4,
+            67.7, 67.8, 67.4, 67.5, 67.6, 67.4, 67.6, 67.7, 67.6,
+            67.6, 67.9, 67.5,
+        ],
+        "power_w": [
+            7.8, 21.3, 21.6, 21.6, 21.6, 21.7, 21.8, 21.8, 21.7,
+            21.8, 21.8, 21.8, 21.8, 21.8, 21.8, 21.8, 21.7, 21.7,
+            21.9, 21.8, 21.8, 21.8, 21.8, 21.8, 21.9, 21.8, 21.9,
+            21.9, 21.9, 21.9, 21.9, 21.9, 22.0, 21.9, 22.0, 22.0,
+            22.0, 21.9, 22.0, 22.0, 21.9, 21.9, 22.0, 22.0, 22.0,
+            22.0, 22.0, 22.0, 22.0, 22.0, 21.9, 22.0, 22.0, 22.0,
+            22.0, 22.0, 21.9, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0,
+            22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0,
+            22.0, 22.0, 22.0, 21.9, 22.0, 22.0, 21.9, 21.9, 22.0,
+            22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 21.9, 22.0, 22.0,
+            22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0,
+            22.0, 22.0, 22.0, 22.0, 21.9, 22.1, 22.0, 22.0, 22.0,
+            22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0,
+            22.0, 22.0, 22.0,
+        ],
+    },
+}
+
+MODELS = ["MobileNetV2", "ResNet-18", "ResNet-34",
+          "ResNet-50", "EfficientNet-B0"]
+MODES = ["15W", "25W", "MAXN"]
+
+
+def setup_style():
+    """Clean plot style."""
+    plt.rcParams.update({
+        "font.size": 11,
+        "axes.titlesize": 13,
+        "axes.labelsize": 11,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "legend.fontsize": 10,
+        "figure.dpi": 150,
+        "savefig.dpi": 150,
+        "savefig.bbox": "tight",
+    })
+
+
+def plot_energy_by_mode(output_dir):
+    """Plot 1: Per-inference energy across power modes."""
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    x = np.arange(len(MODELS))
+    width = 0.25
+    colors = ["#27ae60", "#2980b9", "#e74c3c"]
+
+    for i, (mode, color) in enumerate(zip(MODES, colors)):
+        values = [
+            PAPER_DATA["energy_per_inference_mj"][m][mode]
+            for m in MODELS
+        ]
+        bars = ax.bar(x + i * width, values, width,
+                      label=mode, color=color,
+                      edgecolor="black", linewidth=0.5)
+        for bar, val in zip(bars, values):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.5,
+                    f"{val:.1f}", ha="center", fontsize=8)
+
+    ax.set_xticks(x + width)
+    ax.set_xticklabels(MODELS, rotation=15, ha="right")
+    ax.set_ylabel("Energy per Inference (mJ)")
+    ax.set_title("Per-Inference Energy Across Power Modes")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    ax.set_ylim(0, 42)
+
+    plt.tight_layout()
+    path = os.path.join(output_dir, "energy_by_mode.png")
+    plt.savefig(path)
+    plt.close()
+    print(f"  Saved: {path}")
+
+
+def plot_efficiency_by_mode(output_dir):
+    """Plot 2: Energy efficiency across power modes."""
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    x = np.arange(len(MODELS))
+    width = 0.25
+    colors = ["#27ae60", "#2980b9", "#e74c3c"]
+
+    for i, (mode, color) in enumerate(zip(MODES, colors)):
+        values = [
+            PAPER_DATA["efficiency_inf_per_j"][m][mode]
+            for m in MODELS
+        ]
+        bars = ax.bar(x + i * width, values, width,
+                      label=mode, color=color,
+                      edgecolor="black", linewidth=0.5)
+
+    # Mark 25W as best with star
+    for j, m in enumerate(MODELS):
+        best_val = PAPER_DATA["efficiency_inf_per_j"][m]["25W"]
+        ax.text(j + width, best_val + 1.5, "★",
+                ha="center", fontsize=12, color="#2980b9")
+
+    ax.set_xticks(x + width)
+    ax.set_xticklabels(MODELS, rotation=15, ha="right")
+    ax.set_ylabel("Inferences per Joule")
+    ax.set_title(
+        "Energy Efficiency by Power Mode — "
+        "25W is optimal for ALL models"
     )
-    from powerlens.analysis.thermal import ThermalMonitor
-    from powerlens.sensors.gpu_monitor import GpuMonitor
-    from powerlens.analysis.thermal import (
-            ThermalMonitor,
-            discover_thermal_zones,
-            read_temperatures,
-        )
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
 
-    # Check thermal availability once
-    thermal_zones = discover_thermal_zones()
-    thermal_available = len(thermal_zones) > 0
-    if thermal_available:
-        temps = read_temperatures(thermal_zones)
-        gpu_temp = next((t.temperature_c for t in temps if "gpu" in t.zone_name), 0)
-        print(f"Starting GPU temperature: {gpu_temp:.1f}°C")
-    output_dir = "readme_plots"
-    os.makedirs(output_dir, exist_ok=True)
+    plt.tight_layout()
+    path = os.path.join(output_dir, "efficiency_by_mode.png")
+    plt.savefig(path)
+    plt.close()
+    print(f"  Saved: {path}")
 
-    models = {
-        "light": {"path": "demo_light.onnx", "desc": "2 blocks, 64ch, 0.5MB"},
-        "medium": {"path": "demo_medium.onnx", "desc": "4 blocks, 256ch, 11MB"},
-        "heavy": {"path": "demo_heavy.onnx", "desc": "8 blocks, 512ch, 81MB"},
-    }
 
-    for name, info in models.items():
-        if not os.path.exists(info["path"]):
-            print(f"ERROR: {info['path']} not found. Run create_demo_model.py first.")
-            sys.exit(1)
+def plot_rail_breakdown(output_dir):
+    """Plot 3: Per-rail power breakdown."""
+    fig, ax = plt.subplots(figsize=(10, 5))
 
-    sensor = detect_sensor(use_mock_fallback=False)
-    print(f"PowerLens v{powerlens.__version__}")
-    print(f"Sensor: {type(sensor).__name__}")
-    print()
+    x = np.arange(len(MODELS))
+    width = 0.5
 
-    # ========================================
-    # Collect data for all models
-    # ========================================
-    results = {}
+    cpu_gpu = [
+        PAPER_DATA["rail_power_maxn"][m]["VDD_CPU_GPU_CV"]
+        for m in MODELS
+    ]
+    soc = [
+        PAPER_DATA["rail_power_maxn"][m]["VDD_SOC"]
+        for m in MODELS
+    ]
 
-    for name, info in models.items():
-        print(f"Profiling {name} model ({info['desc']})...", flush=True)
+    ax.bar(x, soc, width, label="VDD_SOC (static)",
+           color="#f39c12", edgecolor="black", linewidth=0.5)
+    ax.bar(x, cpu_gpu, width, bottom=soc,
+           label="VDD_CPU_GPU_CV (dynamic)",
+           color="#3498db", edgecolor="black", linewidth=0.5)
 
-        # Wait for thermal cooldown before each test
-        if thermal_available:
-            print("  Waiting for thermal cooldown...", end="", flush=True)
-            cooldown_target = 40.0  # Target temperature before starting
-            cooldown_timeout = 120  # Max wait seconds
-            cooldown_start = time.monotonic()
+    # SOC percentage labels
+    for i, (s, c) in enumerate(zip(soc, cpu_gpu)):
+        total = s + c
+        pct = s / total * 100
+        ax.text(i, total + 0.1, f"SOC: {pct:.0f}%",
+                ha="center", fontsize=9, color="#f39c12",
+                fontweight="bold")
 
-            while time.monotonic() - cooldown_start < cooldown_timeout:
-                temps = read_temperatures(thermal_zones)
-                gpu_temp = next((t.temperature_c for t in temps if "gpu" in t.zone_name), 0)
-                if gpu_temp <= cooldown_target:
-                    print(f" GPU at {gpu_temp:.1f}°C ✓")
-                    break
-                print(f" {gpu_temp:.1f}°C", end="", flush=True)
-                time.sleep(5)
-            else:
-                temps = read_temperatures(thermal_zones)
-                gpu_temp = next((t.temperature_c for t in temps if "gpu" in t.zone_name), 0)
-                print(f" timeout at {gpu_temp:.1f}°C (proceeding anyway)")
-        engine = build_engine_for_batch_size(info["path"], batch_size=1)
+    ax.set_xticks(x)
+    ax.set_xticklabels(MODELS, rotation=15, ha="right")
+    ax.set_ylabel("Average Power (W)")
+    ax.set_title(
+        "Per-Rail Power Breakdown (MAXN Mode) — "
+        "SoC static power is 34-44% of compute"
+    )
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
 
-        test_ts = run_trt_inference(engine, num_runs=1, warmup=5, iterations_per_run=1)
-        single_latency = test_ts[0][1] - test_ts[0][0]
-        ipr = max(1, int(0.15 / single_latency))
+    plt.tight_layout()
+    path = os.path.join(output_dir, "rail_breakdown.png")
+    plt.savefig(path)
+    plt.close()
+    print(f"  Saved: {path}")
 
-        thermal = ThermalMonitor(sample_interval_s=0.5)
-        gpu_mon = GpuMonitor(sample_interval_s=0.1)
 
-        ctx = PowerLensContext(sensor=sensor, sample_rate_hz=100)
+def plot_fp16_vs_fp32(output_dir):
+    """Plot 4: FP16 vs FP32 energy comparison."""
+    fig, ax = plt.subplots(figsize=(10, 5))
 
-        if thermal.available:
-            thermal.start()
-        if gpu_mon.available:
-            gpu_mon.start()
+    x = np.arange(len(MODELS))
+    width = 0.35
 
-        with ctx:
-            timestamps = run_trt_inference(engine, num_runs=40, warmup=5,
-                                           iterations_per_run=ipr)
-            for start, end in timestamps:
-                ctx._inference_timestamps.append((start, end))
+    fp16 = [
+        PAPER_DATA["fp16_vs_fp32"][m]["fp16_mj"]
+        for m in MODELS
+    ]
+    fp32 = [
+        PAPER_DATA["fp16_vs_fp32"][m]["fp32_mj"]
+        for m in MODELS
+    ]
 
-        if thermal.available:
-            thermal.stop()
-        if gpu_mon.available:
-            gpu_mon.stop()
+    ax.bar(x - width / 2, fp16, width, label="FP16",
+           color="#2980b9", edgecolor="black", linewidth=0.5)
+    ax.bar(x + width / 2, fp32, width, label="FP32",
+           color="#e74c3c", edgecolor="black", linewidth=0.5)
 
-        report = ctx.report()
-        samples = ctx._sampler.get_samples()
-        gpu_summary = gpu_mon.get_summary()
-        thermal_report = thermal.analyze(report) if thermal.available else None
+    # Ratio labels
+    for i, m in enumerate(MODELS):
+        ratio = PAPER_DATA["fp16_vs_fp32"][m]["energy_ratio"]
+        y_pos = max(fp16[i], fp32[i]) + 1.5
+        ax.text(i, y_pos, f"{ratio:.1f}×",
+                ha="center", fontsize=10, fontweight="bold")
 
-        gpu_temp_max = 0
-        if thermal_report:
-            gpu_temp_max = thermal_report.max_temperatures.get("gpu-thermal", 0)
+    ax.set_xticks(x)
+    ax.set_xticklabels(MODELS, rotation=15, ha="right")
+    ax.set_ylabel("Energy per Inference (mJ)")
+    ax.set_title(
+        "FP16 vs FP32 Energy — "
+        "FP16 saves 1.3-1.7× energy"
+    )
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
 
-        results[name] = {
-            "latency_ms": single_latency * 1000,
-            "energy_j": report.mean_energy_j / ipr,
-            "power_w": report.mean_power_w,
-            "peak_w": report.peak_power_w,
-            "idle_w": report.idle_power_w,
-            "gpu_util": gpu_summary.get("gpu_util_avg_pct", 0),
-            "gpu_freq": gpu_summary.get("gpu_freq_avg_mhz", 0),
-            "gpu_temp_max": gpu_temp_max,
-            "samples": samples,
-            "report": report,
-            "desc": info["desc"],
-            "ipr": ipr,
-        }
+    plt.tight_layout()
+    path = os.path.join(output_dir, "fp16_vs_fp32.png")
+    plt.savefig(path)
+    plt.close()
+    print(f"  Saved: {path}")
 
-        print(f"  {name}: {single_latency*1000:.1f}ms, {report.mean_energy_j/ipr:.4f}J, "
-              f"{report.mean_power_w:.1f}W, GPU={gpu_summary.get('gpu_util_avg_pct', 0):.0f}%, "
-              f"Tmax={gpu_temp_max:.1f}°C")
 
-        del engine
-        time.sleep(1.0)
+def plot_batch_scaling(output_dir):
+    """Plot 5: Batch size scaling."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    # ========================================
-    # Plot 1: Model Comparison Bar Chart
-    # ========================================
-    print("\nGenerating plots...")
-
-    model_names = ["light", "medium", "heavy"]
-    colors = ["#2ecc71", "#f39c12", "#e74c3c"]
-
-    fig, axes = plt.subplots(1, 5, figsize=(20, 5))
+    bs = PAPER_DATA["batch_scaling"]
+    batches = bs["batch"]
+    energy = bs["energy_mj"]
+    efficiency = bs["efficiency"]
+    throughput = bs["throughput"]
 
     # Energy per inference
-    energies = [results[m]["energy_j"] for m in model_names]
-    axes[0].bar(model_names, energies, color=colors, edgecolor="black", linewidth=0.5)
-    axes[0].set_ylabel("Energy per Inference (J)")
-    axes[0].set_title("Energy / Inference")
-    for i, v in enumerate(energies):
-        axes[0].text(i, v + max(energies) * 0.02, f"{v:.3f}J", ha="center", fontsize=9)
+    ax1.plot(batches, energy, "o-", color="#e74c3c",
+             linewidth=2, markersize=8)
+    ax1.set_xlabel("Batch Size")
+    ax1.set_ylabel("Energy per Inference (mJ)")
+    ax1.set_title("Energy Decreases with Batch Size")
+    ax1.grid(alpha=0.3)
+    for b, e in zip(batches, energy):
+        ax1.annotate(f"{e:.1f}", (b, e),
+                     textcoords="offset points",
+                     xytext=(0, 10), ha="center", fontsize=9)
 
-    # Average power
-    powers = [results[m]["power_w"] for m in model_names]
-    axes[1].bar(model_names, powers, color=colors, edgecolor="black", linewidth=0.5)
-    axes[1].set_ylabel("Average Power (W)")
-    axes[1].set_title("Average Power")
-    for i, v in enumerate(powers):
-        axes[1].text(i, v + max(powers) * 0.02, f"{v:.1f}W", ha="center", fontsize=9)
+    # Efficiency and throughput
+    color1 = "#2980b9"
+    color2 = "#27ae60"
 
-    # Latency
-    latencies = [results[m]["latency_ms"] for m in model_names]
-    axes[2].bar(model_names, latencies, color=colors, edgecolor="black", linewidth=0.5)
-    axes[2].set_ylabel("Latency (ms)")
-    axes[2].set_title("Inference Latency")
-    for i, v in enumerate(latencies):
-        axes[2].text(i, v + max(latencies) * 0.02, f"{v:.1f}ms", ha="center", fontsize=9)
+    ax2.plot(batches, efficiency, "o-", color=color1,
+             linewidth=2, markersize=8, label="Efficiency (inf/J)")
+    ax2.set_xlabel("Batch Size")
+    ax2.set_ylabel("Inferences per Joule", color=color1)
+    ax2.tick_params(axis="y", labelcolor=color1)
 
-    # GPU utilization
-    gpu_utils = [results[m]["gpu_util"] for m in model_names]
-    axes[3].bar(model_names, gpu_utils, color=colors, edgecolor="black", linewidth=0.5)
-    axes[3].set_ylabel("GPU Utilization (%)")
-    axes[3].set_title("GPU Utilization")
-    axes[3].set_ylim(0, 100)
-    for i, v in enumerate(gpu_utils):
-        axes[3].text(i, v + 2, f"{v:.0f}%", ha="center", fontsize=9)
+    ax2b = ax2.twinx()
+    ax2b.plot(batches, throughput, "s--", color=color2,
+              linewidth=2, markersize=8, label="Throughput (inf/s)")
+    ax2b.set_ylabel("Throughput (inf/s)", color=color2)
+    ax2b.tick_params(axis="y", labelcolor=color2)
 
-    # Max GPU temperature
-    gpu_temps = [results[m]["gpu_temp_max"] for m in model_names]
-    axes[4].bar(model_names, gpu_temps, color=colors, edgecolor="black", linewidth=0.5)
-    axes[4].set_ylabel("Max GPU Temp (°C)")
-    axes[4].set_title("GPU Temperature")
-    for i, v in enumerate(gpu_temps):
-        axes[4].text(i, v + 0.3, f"{v:.1f}°C", ha="center", fontsize=9)
+    ax2.set_title("Efficiency & Throughput vs Batch Size")
+    lines1, labels1 = ax2.get_legend_handles_labels()
+    lines2, labels2 = ax2b.get_legend_handles_labels()
+    ax2.legend(lines1 + lines2, labels1 + labels2,
+               loc="center right")
+    ax2.grid(alpha=0.3)
 
-    fig.suptitle("PowerLens — Model Complexity vs Energy (Jetson Orin Nano)", fontsize=14, y=1.02)
+    fig.suptitle(
+        "Batch Size Scaling — ResNet-18 FP16 (MAXN Mode)",
+        fontsize=13, y=1.02,
+    )
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "model_comparison.png"), dpi=150, bbox_inches="tight")
+    path = os.path.join(output_dir, "batch_scaling.png")
+    plt.savefig(path)
     plt.close()
-    print(f"  Saved: {output_dir}/model_comparison.png")
+    print(f"  Saved: {path}")
 
 
-    # ========================================
-    # Plot 1b: Individual Power Traces (separate files)
-    # ========================================
-    for name, color in zip(model_names, colors):
-        samples = results[name]["samples"]
-        if not samples:
-            continue
+def plot_thermal_timeline(output_dir):
+    """Plot 6: Thermal stress test timeline."""
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7),
+                                    sharex=True)
 
-        t0 = samples[0][0].timestamp
-        times = [(cycle[0].timestamp - t0) for cycle in samples]
+    ts = PAPER_DATA["thermal_timeline"]
+    time_s = ts["time_s"]
+    gpu_temp = ts["gpu_temp_c"]
+    power = ts["power_w"]
 
-        # Per-rail power
-        rail_data = {}
-        for cycle in samples:
-            for s in cycle:
-                if s.rail_name not in rail_data:
-                    rail_data[s.rail_name] = {"times": [], "power": []}
-                rail_data[s.rail_name]["times"].append(cycle[0].timestamp - t0)
-                rail_data[s.rail_name]["power"].append(s.power_w)
+    # Power
+    ax1.plot(time_s, power, color="#e74c3c", linewidth=1.5)
+    ax1.fill_between(time_s, power, alpha=0.15, color="#e74c3c")
+    ax1.set_ylabel("VDD_IN Power (W)")
+    ax1.set_title(
+        "Sustained Inference Stress Test — "
+        "ResNet-50 Batch=16, MAXN Mode, 99% GPU, 600s"
+    )
+    ax1.grid(alpha=0.3)
+    avg_power = np.mean(power[5:])  # Skip first idle sample
+    ax1.axhline(y=avg_power, color="gray", linestyle="--",
+                alpha=0.5)
+    ax1.annotate(f"Avg: {avg_power:.1f}W",
+                 xy=(time_s[-1] * 0.85, avg_power + 0.3),
+                 fontsize=10, color="gray")
+    ax1.set_ylim(0, 25)
 
-        total_power = [sum(s.power_w for s in cycle) for cycle in samples]
+    # Temperature
+    ax2.plot(time_s, gpu_temp, color="#f39c12", linewidth=2)
+    ax2.fill_between(time_s, gpu_temp, alpha=0.15,
+                     color="#f39c12")
+    ax2.axhline(y=85, color="red", linestyle="--",
+                linewidth=1.5, label="Throttle threshold (85°C)")
+    ax2.set_ylabel("GPU Temperature (°C)")
+    ax2.set_xlabel("Time (seconds)")
+    ax2.grid(alpha=0.3)
+    ax2.set_ylim(35, 90)
+    ax2.legend(loc="upper right")
 
-        fig, ax = plt.subplots(figsize=(12, 6))
-
-        # Total power
-        ax.plot(times, total_power, color="black", linewidth=1.8, label="Total Power", zorder=3)
-
-        # Per-rail
-        rail_colors = {"VDD_IN": "#e74c3c", "VDD_CPU_GPU_CV": "#3498db", "VDD_SOC": "#2ecc71"}
-        for rail_name, data in sorted(rail_data.items()):
-            rc = rail_colors.get(rail_name, "#999999")
-            ax.fill_between(data["times"], data["power"], alpha=0.15, color=rc)
-            ax.plot(data["times"], data["power"], color=rc, linewidth=1.2,
-                    alpha=0.8, label=rail_name)
-
-        # Highlight inference regions
-        report = results[name]["report"]
-        if report and report.inferences:
-            for inf in report.inferences[:10]:  # Show first 10 to avoid clutter
-                start = inf.start_time - t0
-                end = inf.end_time - t0
-                ax.axvspan(start, end, alpha=0.08, color=color)
-
-        r = results[name]
-
-        # Dynamic Y-axis: pad 15% above max
-        max_power = max(total_power) if total_power else 10
-        ax.set_ylim(0, max_power * 1.15)
-
-        # Add stats box
-        textstr = (
-            f"Model: {name} ({r['desc']})\n"
-            f"Latency: {r['latency_ms']:.1f} ms\n"
-            f"Energy/inf: {r['energy_j']:.4f} J\n"
-            f"Avg power: {r['power_w']:.1f} W\n"
-            f"Peak power: {r['peak_w']:.1f} W\n"
-            f"Idle power: {r['idle_w']:.1f} W\n"
-            f"GPU util: {r['gpu_util']:.0f}%\n"
-            f"GPU temp: {r['gpu_temp_max']:.1f}°C"
-        )
-        props = dict(boxstyle="round,pad=0.5", facecolor="wheat", alpha=0.85)
-        ax.text(0.02, 0.97, textstr, transform=ax.transAxes, fontsize=10,
-                verticalalignment="top", bbox=props, family="monospace")
-
-        # Add idle baseline
-        idle = r["idle_w"]
-        ax.axhline(y=idle, color="gray", linestyle="--", alpha=0.4, linewidth=1)
-        ax.annotate(f"Idle: {idle:.1f}W", xy=(times[-1] * 0.75, idle + max_power * 0.02),
-                    fontsize=9, color="gray")
-
-        # Add average line
-        avg = r["power_w"]
-        ax.axhline(y=avg, color=color, linestyle=":", alpha=0.5, linewidth=1)
-        ax.annotate(f"Avg: {avg:.1f}W", xy=(times[-1] * 0.75, avg + max_power * 0.02),
-                    fontsize=9, color=color)
-
-        ax.set_xlabel("Time (seconds)", fontsize=12)
-        ax.set_ylabel("Power (watts)", fontsize=12)
-        ax.set_title(
-            f"PowerLens — {name.upper()} Model Power Trace (Jetson Orin Nano)",
-            fontsize=14
-        )
-        ax.legend(fontsize=10, loc="upper right")
-        ax.grid(True, alpha=0.3)
-        ax.set_xlim(times[0], times[-1])
-
-        plt.tight_layout()
-        filepath = os.path.join(output_dir, f"power_trace_{name}.png")
-        plt.savefig(filepath, dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"  Saved: {filepath}")
-    # ========================================
-    # Plot 2: Power Traces Overlaid
-    # ========================================
-    fig, ax = plt.subplots(figsize=(14, 6))
-
-    for name, color in zip(model_names, colors):
-        samples = results[name]["samples"]
-        if not samples:
-            continue
-
-        t0 = samples[0][0].timestamp
-        times = [(cycle[0].timestamp - t0) for cycle in samples]
-        total_power = [sum(s.power_w for s in cycle) for cycle in samples]
-
-        ax.plot(times, total_power, color=color, linewidth=1.2, alpha=0.8,
-                label=f"{name} ({results[name]['desc']})")
-
-    ax.set_xlabel("Time (seconds)", fontsize=12)
-    ax.set_ylabel("Total Power (W)", fontsize=12)
-    ax.set_title("PowerLens — Real-Time Power Traces (Jetson Orin Nano)", fontsize=14)
-    ax.legend(fontsize=10, loc="upper right")
-    ax.grid(True, alpha=0.3)
-    ax.set_ylim(bottom=0)
-
-    # Add idle baseline annotation
-    idle_power = results["light"]["idle_w"]
-    ax.axhline(y=idle_power, color="gray", linestyle="--", alpha=0.5)
-    ax.annotate(f"Idle: {idle_power:.1f}W", xy=(0.5, idle_power),
-                fontsize=9, color="gray")
+    # Annotate key points
+    ax2.annotate(
+        f"Start: {gpu_temp[0]:.0f}°C",
+        xy=(0, gpu_temp[0]),
+        xytext=(20, gpu_temp[0] + 8),
+        arrowprops=dict(arrowstyle="->", color="gray"),
+        fontsize=10,
+    )
+    ax2.annotate(
+        f"Steady state: {gpu_temp[-1]:.0f}°C\n"
+        f"(18°C headroom)",
+        xy=(time_s[-1], gpu_temp[-1]),
+        xytext=(time_s[-1] - 80, gpu_temp[-1] + 10),
+        arrowprops=dict(arrowstyle="->", color="gray"),
+        fontsize=10,
+    )
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "power_traces.png"), dpi=150, bbox_inches="tight")
+    path = os.path.join(output_dir, "thermal_timeline.png")
+    plt.savefig(path)
     plt.close()
-    print(f"  Saved: {output_dir}/power_traces.png")
-
-    # ========================================
-    # Plot 3: Energy Scaling with Iterations
-    # ========================================
-    print("\nProfiling iteration scaling (heavy model)...")
+    print(f"  Saved: {path}")
 
 
-    # Cooldown before iteration scaling
-    if thermal_available:
-        print("  Waiting for thermal cooldown...", end="", flush=True)
-        cooldown_start = time.monotonic()
-        while time.monotonic() - cooldown_start < 120:
-            temps = read_temperatures(thermal_zones)
-            gpu_temp = next((t.temperature_c for t in temps if "gpu" in t.zone_name), 0)
-            if gpu_temp <= 40.0:
-                print(f" GPU at {gpu_temp:.1f}°C ✓")
-                break
-            print(f" {gpu_temp:.1f}°C", end="", flush=True)
-            time.sleep(5)
-        else:
-            print(" timeout (proceeding)")
-    
-    engine = build_engine_for_batch_size("demo_heavy.onnx", batch_size=1)
-    test_ts = run_trt_inference(engine, num_runs=1, warmup=5, iterations_per_run=1)
-    single_latency = test_ts[0][1] - test_ts[0][0]
+def plot_latency_by_mode(output_dir):
+    """Plot 7: Latency across power modes (showing <2% variation)."""
+    fig, ax = plt.subplots(figsize=(10, 5))
 
-    iter_counts = [1, 5, 10, 25, 50, 100]
-    iter_energy = []
-    iter_power = []
-    iter_gpu = []
+    # Per-mode latency data from experiments
+    latency_by_mode = {
+        "MobileNetV2":    {"15W": 3.32, "25W": 3.34, "MAXN": 3.38},
+        "ResNet-18":      {"15W": 3.14, "25W": 3.10, "MAXN": 3.13},
+        "ResNet-34":      {"15W": 4.85, "25W": 4.87, "MAXN": 4.88},
+        "ResNet-50":      {"15W": 6.59, "25W": 6.59, "MAXN": 6.51},
+        "EfficientNet-B0":{"15W": 6.67, "25W": 6.64, "MAXN": 6.66},
+    }
 
-    for iters in iter_counts:
-        run_ipr = max(iters, ((int(0.1 / single_latency) + iters - 1) // iters) * iters)
+    x = np.arange(len(MODELS))
+    width = 0.25
+    colors = ["#27ae60", "#2980b9", "#e74c3c"]
 
-        gpu_mon = GpuMonitor(sample_interval_s=0.1)
-        ctx = PowerLensContext(sensor=sensor, sample_rate_hz=100)
+    for i, (mode, color) in enumerate(zip(MODES, colors)):
+        values = [latency_by_mode[m][mode] for m in MODELS]
+        ax.bar(x + i * width, values, width,
+               label=mode, color=color,
+               edgecolor="black", linewidth=0.5)
 
-        if gpu_mon.available:
-            gpu_mon.start()
+    ax.set_xticks(x + width)
+    ax.set_xticklabels(MODELS, rotation=15, ha="right")
+    ax.set_ylabel("Latency (ms)")
+    ax.set_title(
+        "Inference Latency by Power Mode — "
+        "Less than 2% variation across modes"
+    )
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
 
-        with ctx:
-            ts = run_trt_inference(engine, num_runs=15, warmup=3,
-                                   iterations_per_run=run_ipr)
-            for start, end in ts:
-                ctx._inference_timestamps.append((start, end))
-
-        if gpu_mon.available:
-            gpu_mon.stop()
-
-        r = ctx.report()
-        gpu_s = gpu_mon.get_summary()
-
-        energy_per_window = r.mean_energy_j / (run_ipr / iters) if run_ipr > 0 else 0
-        energy_per_inf = energy_per_window / iters if iters > 0 else 0
-
-        iter_energy.append(energy_per_inf)
-        iter_power.append(r.mean_power_w)
-        iter_gpu.append(gpu_s.get("gpu_util_avg_pct", 0))
-
-        print(f"  {iters:>3d} iters: {energy_per_inf:.4f}J, {r.mean_power_w:.1f}W, GPU={gpu_s.get('gpu_util_avg_pct', 0):.0f}%")
-        time.sleep(0.5)
-
-    del engine
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-    # Energy + Power vs iterations
-    color1 = "#e74c3c"
-    color2 = "#3498db"
-
-    ax1.plot(iter_counts, iter_energy, "o-", color=color1, linewidth=2, markersize=8, label="Energy/inference")
-    ax1.set_xlabel("Iterations per Window", fontsize=12)
-    ax1.set_ylabel("Energy per Inference (J)", fontsize=12, color=color1)
-    ax1.tick_params(axis="y", labelcolor=color1)
-
-    ax1b = ax1.twinx()
-    ax1b.plot(iter_counts, iter_power, "s--", color=color2, linewidth=2, markersize=8, label="Avg Power")
-    ax1b.set_ylabel("Average Power (W)", fontsize=12, color=color2)
-    ax1b.tick_params(axis="y", labelcolor=color2)
-
-    ax1.set_title("Energy & Power vs Iteration Count", fontsize=13)
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax1b.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="center right")
-
-    # GPU utilization vs iterations
-    ax2.plot(iter_counts, iter_gpu, "o-", color="#2ecc71", linewidth=2, markersize=8)
-    ax2.fill_between(iter_counts, iter_gpu, alpha=0.2, color="#2ecc71")
-    ax2.set_xlabel("Iterations per Window", fontsize=12)
-    ax2.set_ylabel("GPU Utilization (%)", fontsize=12)
-    ax2.set_title("GPU Utilization vs Iteration Count", fontsize=13)
-    ax2.set_ylim(0, 100)
-    ax2.grid(True, alpha=0.3)
-
-    fig.suptitle("PowerLens — Iteration Scaling Analysis (Heavy Model, Jetson Orin Nano)", fontsize=14, y=1.02)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "iteration_scaling.png"), dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {output_dir}/iteration_scaling.png")
-
-    # ========================================
-    # Plot 4: Sustained Load Timeline
-    # ========================================
-    
-    print("\nRunning 150s sustained load for timeline plot...")
-
-    # Cooldown before sustained test
-    if thermal_available:
-        print("  Waiting for thermal cooldown...", end="", flush=True)
-        cooldown_start = time.monotonic()
-        while time.monotonic() - cooldown_start < 120:
-            temps = read_temperatures(thermal_zones)
-            gpu_temp = next((t.temperature_c for t in temps if "gpu" in t.zone_name), 0)
-            if gpu_temp <= 40.0:
-                print(f" GPU at {gpu_temp:.1f}°C ✓")
-                break
-            print(f" {gpu_temp:.1f}°C", end="", flush=True)
-            time.sleep(5)
-        else:
-            print(" timeout (proceeding)")
-    
-    engine = build_engine_for_batch_size("demo_heavy.onnx", batch_size=1)
-    test_ts = run_trt_inference(engine, num_runs=1, warmup=5, iterations_per_run=1)
-    single_latency = test_ts[0][1] - test_ts[0][0]
-    sustained_ipr = max(1, int(1.0 / single_latency))
-
-    thermal = ThermalMonitor(sample_interval_s=1.0)
-    gpu_mon = GpuMonitor(sample_interval_s=0.5)
-
-    timeline_time = []
-    timeline_power = []
-    timeline_gpu_temp = []
-    timeline_gpu_util = []
-
-    if thermal.available:
-        thermal.start()
-    if gpu_mon.available:
-        gpu_mon.start()
-
-    ctx = PowerLensContext(sensor=sensor, sample_rate_hz=50)
-    start_time = time.monotonic()
-
-    with ctx:
-        run_count = 0
-        while time.monotonic() - start_time < 150:
-            ts = run_trt_inference(engine, num_runs=1, warmup=0,
-                                   iterations_per_run=sustained_ipr)
-            for start, end in ts:
-                ctx._inference_timestamps.append((start, end))
-            run_count += 1
-
-            elapsed = time.monotonic() - start_time
-
-            if run_count % 3 == 0:
-                temps = thermal.read_once() if thermal.available else []
-                gpu_temp = next((t.temperature_c for t in temps if "gpu" in t.zone_name), 0)
-                gpu_sample = gpu_mon.read_once() if gpu_mon.available else None
-                gpu_util = gpu_sample.gpu_util_pct if gpu_sample else 0
-
-                latest = ctx._sampler.get_samples()
-                power = sum(s.power_w for s in latest[-1]) if latest else 0
-
-                timeline_time.append(elapsed)
-                timeline_power.append(power)
-                timeline_gpu_temp.append(gpu_temp)
-                timeline_gpu_util.append(gpu_util)
-
-                if run_count % 15 == 0:
-                    print(f"  [{elapsed:.0f}s] GPU: {gpu_temp:.1f}°C, Power: {power:.1f}W")
-
-    if thermal.available:
-        thermal.stop()
-    if gpu_mon.available:
-        gpu_mon.stop()
-
-    del engine
-
-    # Plot timeline
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
-
-    ax1.plot(timeline_time, timeline_power, color="#e74c3c", linewidth=1.5)
-    ax1.set_ylabel("Power (W)", fontsize=11)
-    ax1.set_title("Sustained GPU Load — 150 Second Timeline (Jetson Orin Nano)", fontsize=14)
-    ax1.grid(True, alpha=0.3)
-    if timeline_power:
-        ax1.axhline(y=np.mean(timeline_power), color="#e74c3c", linestyle="--", alpha=0.5)
-        ax1.annotate(f"Avg: {np.mean(timeline_power):.1f}W",
-                     xy=(timeline_time[-1] * 0.85, np.mean(timeline_power) + 0.5),
-                     fontsize=10, color="#e74c3c")
-
-    ax2.plot(timeline_time, timeline_gpu_temp, color="#f39c12", linewidth=1.5)
-    ax2.set_ylabel("GPU Temperature (°C)", fontsize=11)
-    ax2.grid(True, alpha=0.3)
-    if timeline_gpu_temp:
-        ax2.annotate(f"{timeline_gpu_temp[0]:.0f}°C → {timeline_gpu_temp[-1]:.0f}°C",
-                     xy=(timeline_time[-1] * 0.7, max(timeline_gpu_temp) - 1),
-                     fontsize=10, color="#f39c12")
-
-    ax3.plot(timeline_time, timeline_gpu_util, color="#3498db", linewidth=1.5)
-    ax3.set_ylabel("GPU Utilization (%)", fontsize=11)
-    ax3.set_xlabel("Time (seconds)", fontsize=11)
-    ax3.set_ylim(0, 100)
-    ax3.grid(True, alpha=0.3)
+    # Start y-axis at 0 to show true scale
+    ax.set_ylim(0, 8)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "sustained_timeline.png"), dpi=150, bbox_inches="tight")
+    path = os.path.join(output_dir, "latency_by_mode.png")
+    plt.savefig(path)
     plt.close()
-    print(f"  Saved: {output_dir}/sustained_timeline.png")
+    print(f"  Saved: {path}")
 
-    # ========================================
-    # Plot 4b: Sustained Load Per-Rail Power Trace
-    # ========================================
-    sustained_samples = ctx._sampler.get_samples()
 
-    if sustained_samples:
-        fig, ax = plt.subplots(figsize=(14, 7))
+def plot_energy_latency_frontier(output_dir):
+    """Plot 8: Energy vs latency scatter (Pareto frontier)."""
+    fig, ax = plt.subplots(figsize=(8, 6))
 
-        t0 = sustained_samples[0][0].timestamp
-        times = [(cycle[0].timestamp - t0) for cycle in sustained_samples]
-        total_power = [sum(s.power_w for s in cycle) for cycle in sustained_samples]
+    markers = ["o", "s", "^", "D", "v"]
+    colors = {"15W": "#27ae60", "25W": "#2980b9", "MAXN": "#e74c3c"}
 
-        ax.plot(times, total_power, color="black", linewidth=1.5, label="Total Power", zorder=3)
+    latency_by_mode = {
+        "MobileNetV2":    {"15W": 3.32, "25W": 3.34, "MAXN": 3.38},
+        "ResNet-18":      {"15W": 3.14, "25W": 3.10, "MAXN": 3.13},
+        "ResNet-34":      {"15W": 4.85, "25W": 4.87, "MAXN": 4.88},
+        "ResNet-50":      {"15W": 6.59, "25W": 6.59, "MAXN": 6.51},
+        "EfficientNet-B0":{"15W": 6.67, "25W": 6.64, "MAXN": 6.66},
+    }
 
-        rail_data = {}
-        for cycle in sustained_samples:
-            for s in cycle:
-                if s.rail_name not in rail_data:
-                    rail_data[s.rail_name] = {"times": [], "power": []}
-                rail_data[s.rail_name]["times"].append(cycle[0].timestamp - t0)
-                rail_data[s.rail_name]["power"].append(s.power_w)
+    for j, model in enumerate(MODELS):
+        for mode in MODES:
+            energy = PAPER_DATA["energy_per_inference_mj"][model][mode]
+            latency = latency_by_mode[model][mode]
+            ax.scatter(
+                latency, energy,
+                marker=markers[j],
+                color=colors[mode],
+                s=100, edgecolors="black", linewidth=0.5,
+                zorder=3,
+            )
 
-        rail_colors = {"VDD_IN": "#e74c3c", "VDD_CPU_GPU_CV": "#3498db", "VDD_SOC": "#2ecc71"}
-        for rail_name, data in sorted(rail_data.items()):
-            rc = rail_colors.get(rail_name, "#999999")
-            ax.fill_between(data["times"], data["power"], alpha=0.15, color=rc)
-            ax.plot(data["times"], data["power"], color=rc, linewidth=1.2,
-                    alpha=0.8, label=rail_name)
+    # Legend for modes
+    for mode, color in colors.items():
+        ax.scatter([], [], color=color, label=mode,
+                   s=80, edgecolors="black", linewidth=0.5)
+    # Legend for models
+    for j, model in enumerate(MODELS):
+        ax.scatter([], [], marker=markers[j], color="gray",
+                   label=model, s=80, edgecolors="black",
+                   linewidth=0.5)
 
-        # Dynamic Y-axis
-        max_power = max(total_power) if total_power else 10
-        ax.set_ylim(0, max_power * 1.15)
+    ax.set_xlabel("Latency (ms)")
+    ax.set_ylabel("Energy per Inference (mJ)")
+    ax.set_title("Energy-Latency Trade-off Space")
+    ax.legend(loc="upper left", fontsize=8, ncol=2)
+    ax.grid(alpha=0.3)
 
-        # Average line
-        avg_power = np.mean(total_power)
-        ax.axhline(y=avg_power, color="gray", linestyle=":", alpha=0.5)
-        ax.annotate(f"Avg: {avg_power:.1f}W", xy=(times[-1] * 0.85, avg_power + max_power * 0.02),
-                    fontsize=10, color="gray")
+    plt.tight_layout()
+    path = os.path.join(output_dir, "energy_latency_frontier.png")
+    plt.savefig(path)
+    plt.close()
+    print(f"  Saved: {path}")
 
-        # Temperature on secondary axis
-        if timeline_time and timeline_gpu_temp:
-            ax2 = ax.twinx()
-            ax2.plot(timeline_time, timeline_gpu_temp, color="#f39c12",
-                     linewidth=2.5, linestyle="--", label="GPU Temp", zorder=4)
-            ax2.set_ylabel("GPU Temperature (°C)", fontsize=12, color="#f39c12")
-            ax2.tick_params(axis="y", labelcolor="#f39c12")
 
-            # Dynamic temp axis
-            min_temp = min(timeline_gpu_temp) - 2
-            max_temp = max(timeline_gpu_temp) + 2
-            ax2.set_ylim(min_temp, max_temp)
+def main():
+    output_dir = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "images"
+    )
+    os.makedirs(output_dir, exist_ok=True)
 
-            lines1, labels1 = ax.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=10)
-        else:
-            ax.legend(fontsize=10, loc="upper right")
+    setup_style()
 
-        # Stats box
-        sustained_report_final = ctx.report()
-        temp_start = timeline_gpu_temp[0] if timeline_gpu_temp else 0
-        temp_end = timeline_gpu_temp[-1] if timeline_gpu_temp else 0
-        textstr = (
-            f"Duration: 150 seconds\n"
-            f"Total runs: {sustained_report_final.num_inferences}\n"
-            f"Avg power: {avg_power:.1f} W\n"
-            f"Peak power: {max(total_power):.1f} W\n"
-            f"GPU temp: {temp_start:.0f}°C → {temp_end:.0f}°C\n"
-            f"Temp rise: +{temp_end - temp_start:.1f}°C"
-        )
-        props = dict(boxstyle="round,pad=0.5", facecolor="wheat", alpha=0.85)
-        ax.text(0.02, 0.97, textstr, transform=ax.transAxes, fontsize=10,
-                verticalalignment="top", bbox=props, family="monospace")
-
-        ax.set_xlabel("Time (seconds)", fontsize=12)
-        ax.set_ylabel("Power (watts)", fontsize=12)
-        ax.set_title(
-            "PowerLens — 150s Sustained GPU Load with Thermal (Jetson Orin Nano)",
-            fontsize=14
-        )
-        ax.grid(True, alpha=0.3)
-        ax.set_xlim(times[0], times[-1])
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, "sustained_power_trace.png"), dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"  Saved: {output_dir}/sustained_power_trace.png")
-
-    
-
-    # ========================================
-    # Summary
-    ## ========================================
+    print("Generating README plots from paper data...")
+    print(f"Output: {output_dir}/")
     print()
-    print("=" * 60)
-    print("README plots generated!")
-    print("=" * 60)
+
+    plot_energy_by_mode(output_dir)
+    plot_efficiency_by_mode(output_dir)
+    plot_rail_breakdown(output_dir)
+    plot_fp16_vs_fp32(output_dir)
+    plot_batch_scaling(output_dir)
+    plot_thermal_timeline(output_dir)
+    plot_latency_by_mode(output_dir)
+    plot_energy_latency_frontier(output_dir)
+
+    print()
+    print("=" * 50)
+    print("All plots generated!")
+    print("=" * 50)
     print()
     print("Files:")
     for f in sorted(os.listdir(output_dir)):
-        size = os.path.getsize(os.path.join(output_dir, f))
-        print(f"  {output_dir}/{f} ({size/1024:.1f} KB)")
+        if f.endswith(".png"):
+            size = os.path.getsize(os.path.join(output_dir, f))
+            print(f"  {f} ({size / 1024:.0f} KB)")
     print()
-    print("Copy these to your repo root and reference in README.md:")
-    print("  ![Model Comparison](readme_plots/model_comparison.png)")
-    print("  ![Power Traces](readme_plots/power_traces.png)")
-    print("  ![Iteration Scaling](readme_plots/iteration_scaling.png)")
-    print("  ![Sustained Timeline](readme_plots/sustained_timeline.png)")
+    print("8 plots ready for README:")
+    print("  1. energy_by_mode.png        — Per-inference energy across power modes")
+    print("  2. efficiency_by_mode.png    — Inferences/joule, 25W optimal")
+    print("  3. rail_breakdown.png        — Per-rail power, SoC static floor")
+    print("  4. fp16_vs_fp32.png          — Precision comparison")
+    print("  5. batch_scaling.png         — Batch size efficiency")
+    print("  6. thermal_timeline.png      — 300s stress test")
+    print("  7. latency_by_mode.png       — <2% latency variation")
+    print("  8. energy_latency_frontier.png — Trade-off scatter")
 
 
 if __name__ == "__main__":

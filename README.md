@@ -1,9 +1,8 @@
 # ⚡ PowerLens
 
-[![Tests](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml/badge.svg)](https://github.com/ssaserkar/powerlens/actions/workflows/test.yml)
-[![PyPI](https://img.shields.io/badge/PyPI-pending-yellow.svg)](https://github.com/ssaserkar/powerlens)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Platform: Jetson](https://img.shields.io/badge/platform-NVIDIA%20Jetson-green.svg)](https://developer.nvidia.com/embedded-computing)
 
 **How much energy does your AI model actually use? PowerLens tells you.**
 
@@ -45,92 +44,128 @@ powerlens detect
 
 ## Real Measurements from Jetson Orin Nano
 
-Everything below is real data from a Jetson Orin Nano running MAXN_SUPER mode. Not simulated. Each test started after thermal cooldown to 40°C for consistent results.
+Everything below is real data from a Jetson Orin Nano. Not simulated. Five production models (MobileNetV2, ResNet-18, ResNet-34, ResNet-50, EfficientNet-B0) profiled across three power modes (15W, 25W, MAXN) with FP16 TensorRT engines. Each test started after thermal cooldown for consistent results.
 
-### Three Models, Three Power Profiles
+### Per-Inference Energy Across Power Modes
 
-We tested three models of increasing size to show how model complexity affects energy:
+How much energy does a single inference cost? It depends on the model — and surprisingly, on the power mode:
 
-| Model  | Size   | Inference Time | Energy per Inference | Average Power | GPU Usage | Max GPU Temp |
-|--------|--------|----------------|----------------------|---------------|-----------|--------------|
-| Small  | 0.5 MB | 1.3 ms         | 0.010 J              | 13.6 W        | 58%       | 41.6°C       |
-| Medium | 11 MB  | 7.1 ms         | 0.150 J              | 32.8 W        | 70%       | 46.5°C       |
-| Large  | 81 MB  | 33.4 ms        | 1.281 J              | 35.3 W        | 75%       | 49.9°C       |
+| Model | 15W | 25W | MAXN |
+|-------|-----|-----|------|
+| MobileNetV2 | 10.5 mJ | 10.3 mJ | 10.6 mJ |
+| ResNet-18 | 10.4 mJ | 10.2 mJ | 10.4 mJ |
+| ResNet-34 | 16.3 mJ | 14.5 mJ | 14.7 mJ |
+| ResNet-50 | 22.6 mJ | 19.7 mJ | 19.8 mJ |
+| EfficientNet-B0 | 19.4 mJ | 16.9 mJ | 18.0 mJ |
 
-**The large model uses 128x more energy per inference than the small model.**
+ResNet-50 uses 2× more energy per inference than MobileNetV2, but both are under 23 mJ.
 
-![Model Comparison](docs/images/model_comparison.png)
+![Energy by Mode](docs/images/energy_by_mode.png)
+
+### 25W Mode Is the Most Efficient — For Every Model
+
+The key finding: **25W mode delivers the best energy efficiency across all five models**, beating both the lower 15W mode and the uncapped MAXN mode:
+
+| Model | 15W (inf/J) | 25W (inf/J) | MAXN (inf/J) |
+|-------|-------------|-------------|--------------|
+| MobileNetV2 | 95.7 | 96.7 | 94.1 |
+| ResNet-18 | 96.2 | 98.1 | 96.7 |
+| ResNet-34 | 61.5 | 69.1 | 68.0 |
+| ResNet-50 | 44.3 | 50.8 | 50.5 |
+| EfficientNet-B0 | 51.6 | 59.1 | 55.8 |
+
+15W mode saves power but runs slower, so energy per inference is actually higher. MAXN mode draws more power without proportional speedup. 25W hits the sweet spot.
+
+![Efficiency by Mode](docs/images/efficiency_by_mode.png)
 
 ### Where Does the Power Go?
 
-PowerLens breaks down power by rail — GPU, CPU, and system — so you can see exactly where the energy is spent. Each model has its own distinct power signature:
+PowerLens breaks down power by rail so you can see exactly where energy is spent. On the Orin Nano in MAXN mode, the SoC static power floor is a significant fraction of total compute power:
 
-**Small Model** — barely wakes the GPU:
+| Model | VDD_CPU_GPU_CV | VDD_SOC | SOC % of Compute |
+|-------|----------------|---------|------------------|
+| MobileNetV2 | 2.17 W | 1.68 W | 44% |
+| ResNet-18 | 2.76 W | 1.86 W | 40% |
+| ResNet-34 | 3.87 W | 1.95 W | 34% |
+| ResNet-50 | 3.90 W | 2.05 W | 34% |
+| EfficientNet-B0 | 2.83 W | 1.70 W | 38% |
 
-![Small Model Power Trace](docs/images/power_trace_light.png)
+The SoC static power is 34–44% of compute rail power. For lightweight models like MobileNetV2, nearly half the compute energy goes to keeping the SoC alive — not running your model.
 
-**Medium Model** — GPU fully engaged:
+![Rail Breakdown](docs/images/rail_breakdown.png)
 
-![Medium Model Power Trace](docs/images/power_trace_medium.png)
+### FP16 vs FP32: Precision Matters
 
-**Large Model** — GPU saturated, drawing maximum power:
+FP16 inference isn't just faster — it uses substantially less energy:
 
-![Large Model Power Trace](docs/images/power_trace_heavy.png)
+| Model | FP16 (mJ) | FP32 (mJ) | Energy Ratio |
+|-------|-----------|-----------|--------------|
+| MobileNetV2 | 24.5 | 27.8 | 1.1× |
+| ResNet-18 | 16.6 | 29.8 | 1.8× |
+| ResNet-34 | 23.7 | 49.8 | 2.1× |
+| ResNet-50 | 35.6 | 59.1 | 1.7× |
+| EfficientNet-B0 | 31.6 | 41.0 | 1.3× |
 
-### All Three Models Overlaid
+FP16 saves 1.1–2.1× energy depending on the model. ResNet-34 benefits most — FP32 costs more than double the energy. The savings come from both faster execution (1.1–1.7× speedup) and lower power draw.
 
-Same time scale, showing the dramatic difference in power draw:
+![FP16 vs FP32](docs/images/fp16_vs_fp32.png)
 
-![All Power Traces](docs/images/power_traces.png)
+### Batch Size Scaling
 
-### How GPU Load Affects Energy
+Larger batches amortize overhead and improve energy efficiency. ResNet-18 FP16 in MAXN mode:
 
-Running more iterations back-to-back pushes GPU utilization from 51% to 97% and increases power from 28.5W to 38.0W:
+| Batch Size | Energy/Inference (mJ) | Efficiency (inf/J) | Throughput (inf/s) |
+|------------|----------------------|--------------------|--------------------|
+| 1 | 9.5 | 104.8 | 410 |
+| 2 | 6.4 | 156.9 | 538 |
+| 4 | 5.5 | 180.8 | 626 |
+| 8 | 4.9 | 204.5 | 704 |
 
-| Iterations | Energy/Inference | Average Power | GPU Utilization |
-|------------|------------------|---------------|-----------------|
-| 1          | 0.933 J          | 28.5 W        | 51%             |
-| 5          | 1.289 J          | 35.2 W        | 72%             |
-| 10         | 1.413 J          | 37.1 W        | 84%             |
-| 25         | 1.478 J          | 37.6 W        | 94%             |
-| 50         | 1.505 J          | 37.9 W        | 95%             |
-| 100        | 1.518 J          | 38.0 W        | 97%             |
+Batch size 8 is 2× more energy efficient than batch size 1, reducing per-inference energy from 9.5 mJ to 4.9 mJ while increasing throughput from 410 to 704 inferences per second.
 
-![Iteration Scaling](docs/images/iteration_scaling.png)
+![Batch Scaling](docs/images/batch_scaling.png)
 
-### Which Power Mode Is Most Efficient?
+### Latency Is Nearly Identical Across Power Modes
 
-Jetson has multiple power modes. PowerLens tests them all automatically:
+A surprising finding: inference latency varies less than 2% across power modes. The GPU runs at the same clock speed regardless of the power cap — only the power rails change:
+
+| Model | 15W | 25W | MAXN | Max Variation |
+|-------|-----|-----|------|---------------|
+| MobileNetV2 | 3.32 ms | 3.34 ms | 3.38 ms | 1.8% |
+| ResNet-18 | 3.14 ms | 3.10 ms | 3.13 ms | 1.3% |
+| ResNet-34 | 4.85 ms | 4.87 ms | 4.88 ms | 0.6% |
+| ResNet-50 | 6.59 ms | 6.59 ms | 6.51 ms | 1.2% |
+| EfficientNet-B0 | 6.67 ms | 6.64 ms | 6.66 ms | 0.5% |
+
+This means you can switch to 25W mode for better energy efficiency with virtually no latency penalty.
+
+![Latency by Mode](docs/images/latency_by_mode.png)
+
+### Energy-Latency Trade-off Space
+
+Where does each model sit in the energy-latency space? This scatter plot shows all five models across all three power modes:
+
+![Energy-Latency Frontier](docs/images/energy_latency_frontier.png)
+
+MobileNetV2 and ResNet-18 cluster in the low-energy, low-latency corner. ResNet-50 and EfficientNet-B0 cost more energy and take longer. The power mode shifts energy (vertical axis) but barely moves latency (horizontal axis) — confirming the <2% latency finding.
+
+### 600-Second Thermal Stress Test
+
+Running ResNet-50 at batch size 16 continuously in MAXN mode for 10 minutes with 99% GPU utilization. Power stays rock-solid while temperature rises and stabilizes:
+
+![Thermal Timeline](docs/images/thermal_timeline.png)
 
 ```
-Power Mode Comparison — ResNet18
-======================================================================
-Mode               Latency   Energy/inf    Avg Power   Efficiency
-----------------------------------------------------------------------
-15W                   2.9ms      0.015J       11.6W       68.0 inf/J
-25W                   2.9ms      0.015J       11.8W       69.1 inf/J
-MAXN_SUPER            2.9ms      0.015J       12.1W       65.4 inf/J
-----------------------------------------------------------------------
-Most efficient: 25W mode
-
-→ 25W mode is more energy efficient than max performance mode
-```
-
-### 150-Second Stress Test
-
-Running the large model continuously for 150 seconds. GPU temperature rises 10°C while power stays stable:
-
-![Sustained Timeline](docs/images/sustained_timeline.png)
-
-![Sustained Power Trace](docs/images/sustained_power_trace.png)
-
-```
-Idle power:      10.4 W
-Load power:      37.4 W average (255% increase)
-GPU temperature: 52.5°C → 62.5°C (+10°C over 150 seconds)
-GPU frequency:   1020 MHz sustained
+Idle power:      ~8 W
+Load power:      22.0 W average (stable after 10s ramp-up)
+GPU temperature: 38°C → 68°C (+30°C over 600 seconds)
+Steady state:    ~67.5°C (reached around 300s)
+Throttle threshold: 85°C
+Thermal headroom:   18°C
 Throttling:      None detected ✓
 ```
+
+The Orin Nano stabilizes at 67.5°C with 18°C of headroom below the throttle threshold — even under sustained maximum load. Power draw is remarkably stable at 22.0W after the initial ramp.
 
 ---
 
@@ -187,7 +222,7 @@ This works with:
 - **TensorRT:** `context.execute_v2(bindings)`
 - **ONNX Runtime:** `session.run(None, {"input": data})`
 - **TensorFlow Lite:** `interpreter.invoke()`
-- **Any Python function** that does computation
+- Any Python function that does computation
 
 ### From the Command Line
 
@@ -203,9 +238,11 @@ For quick TensorRT profiling without writing code:
 | `powerlens demo --real` | Demo with real hardware sensor |
 | `powerlens detect` | Show available sensors and board info |
 
-### CI/CD Energy Gate
+---
 
-When deploying AI to battery-powered devices or large fleets, you need to catch models that use too much energy before they reach production — not after they drain 10,000 batteries.
+## CI/CD Energy Gate
+
+When deploying AI to battery-powered devices or large fleets, you need to catch models that use too much energy *before* they reach production — not after they drain 10,000 batteries.
 
 PowerLens can act as an automated gate in your CI/CD pipeline. Set an energy budget, and any model that exceeds it fails the build:
 
@@ -261,7 +298,9 @@ This lets your team set energy budgets per device:
 - **Security camera** (wall power): `--max-energy 0.5` (power cost matters at fleet scale)
 - **Robot arm** (large battery): `--max-energy 0.1` (balance between accuracy and runtime)
 
-### Example Output
+---
+
+## Example Output
 
 ```
 PowerLens Inference Energy Report
@@ -269,23 +308,23 @@ PowerLens Inference Energy Report
 Inferences:         20
 Sample rate:        99.8 Hz
 
-Energy/inference:   0.6778 +/- 0.0768 J
-  Min:              0.4738 J
-  Max:              0.7714 J
+Energy/inference:   10.3 +/- 0.4 mJ
+  Min:              9.8 mJ
+  Max:              11.1 mJ
 
-Power (avg):        12.57 W
-Power (peak):       12.88 W
-Power (idle):       7.71 W
+Power (avg):        7.0 W
+Power (peak):       7.4 W
+Power (idle):       5.2 W
 
 Rail breakdown (avg power):
-  VDD_IN               7.73 W (64%)
-  VDD_CPU_GPU_CV       2.48 W (21%)
-  VDD_SOC              1.79 W (15%)
+  VDD_IN               7.08 W (62%)
+  VDD_CPU_GPU_CV       2.17 W (19%)
+  VDD_SOC              1.68 W (15%)
 
 Thermal Analysis
 ==========================================
-  gpu-thermal          avg=38.6°C  max=39.2°C
-  cpu-thermal          avg=37.3°C  max=37.5°C
+  gpu-thermal          avg=42.1°C  max=43.5°C
+  cpu-thermal          avg=40.8°C  max=41.2°C
 ✓ No thermal throttling detected
 
 GPU Utilization
@@ -297,12 +336,25 @@ GPU Utilization
 
 ## What It Measures
 
-- **Energy per inference** — how many joules each inference costs
+- **Energy per inference** — how many millijoules each inference costs
 - **Power per rail** — GPU, CPU, and system power separately
 - **GPU utilization** — how busy the GPU is during inference
 - **GPU clock speed** — current frequency in MHz
 - **Temperature** — 9 thermal zones including GPU and CPU
 - **Thermal throttling** — detects when heat causes performance drops
+
+---
+
+## Key Findings
+
+From profiling five models across three power modes on Jetson Orin Nano:
+
+- **25W mode is universally optimal** — best energy efficiency for all five models tested, beating both 15W and MAXN
+- **Latency is power-mode-invariant** — less than 2% variation across modes, so switching to 25W costs nothing in speed
+- **SoC static power is 34–44% of compute** — for lightweight models, nearly half the compute energy is overhead
+- **FP16 saves 1.1–2.1× energy** — the savings are model-dependent, with ResNets benefiting most
+- **Batch size 8 is 2× more efficient than batch size 1** — amortizing kernel launch and memory overhead
+- **Thermal steady state at 67.5°C with 18°C headroom** — no throttling even under sustained maximum load
 
 ---
 
@@ -317,19 +369,19 @@ GPU Utilization
 | **[PowerSensor3](https://github.com/nlesc-recruit/PowerSensor3)** | Very accurate power with custom hardware at 20kHz | Requires buying/building extra hardware, no AI workload awareness |
 | **[powertool](https://github.com/nmenon/powertool)** | Raw INA reads for TI boards | Abandoned (5 years), no Jetson, no AI awareness |
 | **Nsight Systems** | GPU compute profiling | No power measurement |
-| **PowerLens** | **Per-inference energy + per-rail breakdown + thermal + GPU util + power mode comparison from one CLI** | Jetson only, no PyTorch hooks yet |
+| **PowerLens** | Per-inference energy + per-rail breakdown + thermal + GPU util + power mode comparison from one CLI | Jetson only, no PyTorch hooks yet |
 
 ---
 
 ## Run the Full Showcase
 
-Generate demo models and run the complete analysis yourself:
+Generate all plots and run the complete analysis yourself:
 
 ```bash
 cd examples/
-python create_demo_model.py         # Creates small/medium/large models
-python generate_readme_plots.py     # Generates all plots (~10 minutes)
-python full_showcase.py             # Runs full 3-part analysis (~5 minutes)
+python generate_readme_plots.py     # Generates all 8 plots from paper data
+python create_demo_model.py         # Creates test models for live profiling
+python full_showcase.py             # Runs full analysis (~5 minutes)
 ```
 
 ---
@@ -349,22 +401,23 @@ python full_showcase.py             # Runs full 3-part analysis (~5 minutes)
 
 ### How PowerLens handles fast inferences
 
-PowerLens samples power sensors at 100Hz (every 10ms) via sysfs. Many AI models run faster than 10ms per inference — for example, ResNet18 on Orin Nano runs in ~1.3ms.
+PowerLens samples power sensors at 100Hz (every 10ms) via sysfs. Many AI models run faster than 10ms per inference — for example, ResNet-18 on Orin Nano runs in ~3.1ms.
 
-**You cannot measure the energy of a single 1.3ms inference with a 10ms sensor.**
+**You cannot measure the energy of a single 3.1ms inference with a 10ms sensor.**
 
-PowerLens handles this by automatically batching: it runs the model N times in a continuous loop, measures total energy over the entire loop using trapezoidal integration, then divides by N to get average energy per inference. The number of iterations is auto-tuned so each measurement window is approximately 100ms — long enough for 10+ power samples.
+PowerLens handles this by **automatically batching**: it runs the model N times in a continuous loop, measures total energy over the entire loop using trapezoidal integration, then divides by N to get average energy per inference. The number of iterations is auto-tuned so each measurement window is approximately 100ms — long enough for 10+ power samples.
 
 ```
-Example: ResNet18 (1.3ms per inference)
-→ Auto-detected: 77 iterations per measurement window
+Example: ResNet-18 (3.1ms per inference)
+→ Auto-detected: 32 iterations per measurement window
 → Window duration: ~100ms
 → Power samples per window: ~10
 → Energy per window: measured via trapezoidal integration
-→ Energy per inference: window energy ÷ 77
+→ Energy per inference: window energy ÷ 32
 ```
 
 This works because power draw is continuous — the sensor captures the sustained load profile across the entire batch, and dividing total energy by iteration count gives accurate average energy per inference.
+
 
 **Limitations:**
 

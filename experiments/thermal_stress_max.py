@@ -21,9 +21,9 @@ def cpu_stress_worker(stop_event):
 def main():
     import tensorrt as trt
 
-    MODEL = "models/resnet50.onnx"
-    DURATION_S = 300
-    BATCH_SIZE = 32
+    MODEL = "models/demo_heavy.onnx"
+    DURATION_S = 600
+    BATCH_SIZE = 16
 
     print(f"Building TensorRT engine (batch={BATCH_SIZE})...")
 

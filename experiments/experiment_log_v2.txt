@@ -126,3 +126,197 @@ Ambient temps: gpu=37.812°C, cpu=37.0°C
 [13:13:16]     Repetition 1/5
 [13:14:01]       → 14.4 mJ/inf, 2.0 ms, 9.5 W
 [13:14:06]     Repetition 2/5
+[13:14:51]       → 14.8 mJ/inf, 2.0 ms, 9.9 W
+[13:14:56]     Repetition 3/5
+[13:15:41]       → 14.4 mJ/inf, 2.0 ms, 9.3 W
+[13:15:46]     Repetition 4/5
+[13:16:31]       → 14.2 mJ/inf, 1.9 ms, 9.5 W
+[13:16:36]     Repetition 5/5
+[13:17:21]       → 14.5 mJ/inf, 1.9 ms, 9.8 W
+[13:17:26]   Cooling down 15s between models...
+[13:17:41] 
+  Model: resnet50 @ 25W
+[13:17:41]     Repetition 1/5
+[13:19:28]       → 19.1 mJ/inf, 2.5 ms, 10.0 W
+[13:19:33]     Repetition 2/5
+[13:21:19]       → 19.5 mJ/inf, 2.5 ms, 10.1 W
+[13:21:24]     Repetition 3/5
+[13:23:10]       → 19.8 mJ/inf, 2.6 ms, 9.7 W
+[13:23:15]     Repetition 4/5
+[13:25:02]       → 19.8 mJ/inf, 2.6 ms, 9.7 W
+[13:25:07]     Repetition 5/5
+[13:26:54]       → 20.2 mJ/inf, 2.8 ms, 9.2 W
+[13:26:59]   Cooling down 15s between models...
+[13:27:14] 
+  Model: efficientnet_b0 @ 25W
+[13:27:14]     Repetition 1/5
+[13:31:26]       → 16.9 mJ/inf, 2.9 ms, 7.6 W
+[13:31:31]     Repetition 2/5
+[13:35:44]       → 16.6 mJ/inf, 2.8 ms, 7.6 W
+[13:35:49]     Repetition 3/5
+[13:40:02]       → 16.6 mJ/inf, 2.8 ms, 7.7 W
+[13:40:07]     Repetition 4/5
+[13:44:20]       → 17.2 mJ/inf, 2.9 ms, 7.5 W
+[13:44:25]     Repetition 5/5
+[13:48:36]       → 17.4 mJ/inf, 3.0 ms, 7.5 W
+[13:48:41]   Cooling down 15s between models...
+[13:48:56] 
+============================================================
+[13:48:56] POWER MODE: MAXN_SUPER
+[13:48:56] ============================================================
+[13:48:56] Switching to MAXN_SUPER (mode 2)
+[13:48:56]   Current: NV Power Mode: MAXN_SUPER
+2
+[13:48:56]   Waiting 30s for stabilization...
+[13:49:26] 
+  Model: mobilenetv2 @ MAXN_SUPER
+[13:49:26]     Repetition 1/5
+[13:50:59]       → 10.7 mJ/inf, 1.8 ms, 7.2 W
+[13:51:04]     Repetition 2/5
+[13:52:36]       → 10.6 mJ/inf, 1.7 ms, 7.2 W
+[13:52:41]     Repetition 3/5
+[13:54:14]       → 10.6 mJ/inf, 1.7 ms, 7.2 W
+[13:54:19]     Repetition 4/5
+[13:55:50]       → 10.5 mJ/inf, 1.7 ms, 7.2 W
+[13:55:55]     Repetition 5/5
+[13:57:28]       → 10.6 mJ/inf, 1.7 ms, 7.2 W
+[13:57:33]   Cooling down 15s between models...
+[13:57:48] 
+  Model: resnet18 @ MAXN_SUPER
+[13:57:48]     Repetition 1/5
+[13:58:31]       → 10.5 mJ/inf, 1.5 ms, 8.3 W
+[13:58:36]     Repetition 2/5
+[13:59:19]       → 10.0 mJ/inf, 1.4 ms, 8.5 W
+[13:59:24]     Repetition 3/5
+[14:00:07]       → 10.7 mJ/inf, 1.6 ms, 8.1 W
+[14:00:12]     Repetition 4/5
+[14:00:56]       → 11.0 mJ/inf, 1.6 ms, 8.2 W
+[14:01:01]     Repetition 5/5
+[14:01:43]       → 9.6 mJ/inf, 1.4 ms, 8.6 W
+[14:01:48]   Cooling down 15s between models...
+[14:02:03] 
+  Model: resnet34 @ MAXN_SUPER
+[14:02:03]     Repetition 1/5
+[14:02:47]       → 14.7 mJ/inf, 2.0 ms, 9.7 W
+[14:02:52]     Repetition 2/5
+[14:03:35]       → 14.8 mJ/inf, 1.9 ms, 9.9 W
+[14:03:40]     Repetition 3/5
+[14:04:23]       → 14.7 mJ/inf, 1.9 ms, 10.0 W
+[14:04:28]     Repetition 4/5
+[14:05:14]       → 14.7 mJ/inf, 2.0 ms, 9.7 W
+[14:05:19]     Repetition 5/5
+[14:06:10]       → 14.8 mJ/inf, 2.0 ms, 9.7 W
+[14:06:15]   Cooling down 15s between models...
+[14:06:30] 
+  Model: resnet50 @ MAXN_SUPER
+[14:06:30]     Repetition 1/5
+[14:08:20]       → 20.0 mJ/inf, 2.6 ms, 10.0 W
+[14:08:25]     Repetition 2/5
+[14:10:06]       → 19.6 mJ/inf, 2.5 ms, 10.1 W
+[14:10:11]     Repetition 3/5
+[14:11:58]       → 20.0 mJ/inf, 2.6 ms, 9.9 W
+[14:12:03]     Repetition 4/5
+[14:13:45]       → 20.0 mJ/inf, 2.6 ms, 9.9 W
+[14:13:50]     Repetition 5/5
+[14:15:30]       → 19.4 mJ/inf, 2.5 ms, 10.2 W
+[14:15:35]   Cooling down 15s between models...
+[14:15:50] 
+  Model: efficientnet_b0 @ MAXN_SUPER
+[14:15:50]     Repetition 1/5
+[14:19:38]       → 17.3 mJ/inf, 2.9 ms, 7.7 W
+[14:19:43]     Repetition 2/5
+[14:23:31]       → 20.1 mJ/inf, 2.9 ms, 8.8 W
+[14:23:36]     Repetition 3/5
+[14:27:22]       → 17.4 mJ/inf, 2.9 ms, 7.7 W
+[14:27:27]     Repetition 4/5
+[14:31:14]       → 17.5 mJ/inf, 2.9 ms, 7.7 W
+[14:31:19]     Repetition 5/5
+[14:35:05]       → 17.6 mJ/inf, 2.9 ms, 7.7 W
+[14:35:10]   Cooling down 15s between models...
+[14:35:25] 
+Interim results saved: experiments/results/interim_20260324_121026.json
+[14:35:25] 
+Interim results saved: experiments/results/interim_20260324_121026.json
+[14:35:25] 
+############################################################
+[14:35:25] # EXPERIMENT 2: Tegrastats Validation
+[14:35:25] ############################################################
+[14:35:25] 
+============================================================
+[14:35:25] VALIDATION: tegrastats comparison
+[14:35:25] ============================================================
+[14:35:25] Switching to MAXN_SUPER (mode 2)
+[14:35:25]   Current: NV Power Mode: MAXN_SUPER
+2
+[14:35:25]   Waiting 30s for stabilization...
+[14:35:56] Starting tegrastats...
+[14:35:59] Running PowerLens profile (ResNet-18, 100 runs)...
+[14:36:49] Stopping tegrastats...
+[14:36:49]   PowerLens profile completed successfully
+[14:36:49]   tegrastats samples: 472
+[14:36:49]   tegrastats VDD_IN: 6.11 W
+[14:36:49]   PowerLens  VDD_IN: 8.25 W
+[14:36:49]   Error: 35.0%
+[14:36:49] 
+############################################################
+[14:36:49] # EXPERIMENT 3: Thermal Stress Test
+[14:36:49] ############################################################
+[14:36:49] 
+============================================================
+[14:36:49] THERMAL: Sustained inference stress test
+[14:36:49] ============================================================
+[14:36:49] Switching to MAXN_SUPER (mode 2)
+[14:36:49]   Current: NV Power Mode: MAXN_SUPER
+2
+[14:36:49]   Waiting 30s for stabilization...
+[14:37:19]   Waiting 30s for thermal baseline...
+[14:37:49]   Initial GPU temp: 38.875°C
+[14:37:49]   Initial CPU temp: 37.968°C
+[14:37:49]   Running sustained inference (5 chunks × 40 runs)...
+[14:39:30]     Chunk 1/5: GPU=40.2°C (t=101s)
+[14:41:11]     Chunk 2/5: GPU=40.6°C (t=201s)
+[14:42:51]     Chunk 3/5: GPU=40.7°C (t=302s)
+[14:44:31]     Chunk 4/5: GPU=41.0°C (t=402s)
+[14:46:12]     Chunk 5/5: GPU=40.6°C (t=503s)
+[14:46:12] 
+  Test duration: 503s
+[14:46:12]   Final GPU temp: 40.593°C
+[14:46:12]   Temp rise: 1.7°C
+[14:46:12]   Max GPU temp: 41.0°C (threshold: 85°C)
+[14:46:12]   Throttled: No
+[14:46:12] 
+============================================================
+[14:46:12] SUMMARY TABLES FOR PAPER
+[14:46:12] ============================================================
+[14:46:12] 
+--- Table: Per-Inference Energy (MAXN_SUPER) ---
+[14:46:12] Model                Energy(mJ)    ±(mJ)  Lat(ms) Power(W)   GPU%  GPUFreq
+[14:46:12] ---------------------------------------------------------------------------
+[14:46:12] mobilenetv2                10.6      0.1      1.7      7.2     54      471
+[14:46:12] resnet18                   10.4      0.6      1.5      8.3     53      506
+[14:46:12] resnet34                   14.7      0.1      2.0      9.8     45      671
+[14:46:12] resnet50                   19.8      0.3      2.6     10.0     49      724
+[14:46:12] efficientnet_b0            18.0      1.2      2.9      7.9     47      635
+[14:46:12] 
+--- Table: Efficiency Across Power Modes ---
+[14:46:12] Model                 15W inf/J  25W inf/J MAXN inf/J     Best
+[14:46:12] -----------------------------------------------------------------
+[14:46:12] mobilenetv2                95.7       96.7       94.1      25W
+[14:46:12] resnet18                   96.2       98.1       96.7      25W
+[14:46:12] resnet34                   61.5       69.1       68.0      25W
+[14:46:12] resnet50                   44.3       50.8       50.5      25W
+[14:46:12] efficientnet_b0            51.6       59.1       55.8      25W
+[14:46:12] 
+--- Table: Per-Rail Power Breakdown (MAXN_SUPER) ---
+[14:46:12] Model                 VDD_IN(W) CPU_GPU(W)     SOC(W)   SOC%
+[14:46:12] ------------------------------------------------------------
+[14:46:12] mobilenetv2                7.08       2.17       1.68   43.6
+[14:46:12] resnet18                   8.16       2.76       1.86   40.3
+[14:46:12] resnet34                   9.50       3.87       1.95   33.5
+[14:46:12] resnet50                   9.74       3.90       2.05   34.5
+[14:46:12] efficientnet_b0            7.72       2.83       1.70   37.5
+[14:46:12] 
+============================================================
+[14:46:12] ALL EXPERIMENTS COMPLETE
+[14:46:12] Results: experiments/results/paper_results_20260324_121026.json
+[14:46:12] ============================================================
