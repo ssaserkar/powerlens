@@ -467,7 +467,7 @@ powerlens/
 ## Related Work
 
 ### Energy Measurement Frameworks
-- **[Zeus](https://github.com/ml-energy/zeus)** (UMich, NVIDIA, Meta) — Multi-platform deep learning energy measurement and optimization. Supports NVIDIA/AMD GPU, CPU, DRAM, Apple Silicon, and Jetson. PyTorch-centric with training optimization. [NSDI'23 paper](https://www.usenix.org/conference/nsdi23/presentation/you), [SOSP'24 paper](https://dl.acm.org/doi/10.1145/3694715.3695971). PowerLens complements Zeus by providing TensorRT-native profiling, per-rail power breakdown, thermal monitoring, and power mode comparison — features specific to Jetson deployment workflows.
+- **[Zeus](https://github.com/ml-energy/zeus)** (UMich, NVIDIA, Meta) — Multi-platform deep learning energy measurement and optimization. Supports NVIDIA/AMD GPU, CPU, DRAM, Apple Silicon, and Jetson. PyTorch-centric with training optimization. [NSDI'23 paper](https://www.usenix.org/conference/nsdi23/presentation/you). PowerLens complements Zeus by providing TensorRT-native profiling, per-rail power breakdown, thermal monitoring, and power mode comparison — features specific to Jetson deployment workflows.
 
 ### Edge AI Energy Optimization
 - **[EcoEdgeInfer](https://github.com/PACELab/EcoEdgeInfer)** (Stony Brook University) — Adaptive optimization of energy and latency for DNN inference on edge devices via DVFS tuning. [SEC'24 paper](https://doi.org/10.1109/SEC62691.2024.00023). Focuses on finding optimal hardware configurations rather than measurement and reporting.
@@ -510,10 +510,10 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 If PowerLens helps your research:
 
 ```bibtex
-@software{powerlens2025,
+@software{powerlens2026,
   title={PowerLens: Per-Inference Energy Profiling for NVIDIA Jetson},
   author={Aserkar, S.},
-  year={2025},
+  year={2026},
   url={https://github.com/ssaserkar/powerlens}
 }
 ```
